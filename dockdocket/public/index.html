@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>DockDocket MVP</title>
+		<style>
+			:root {
+				--bg: #0b1220;
+				--surface: #111a2c;
+				--surface-soft: #18233a;
+				--text: #e7edf8;
+				--muted: #9db0cf;
+				--ok: #2dc083;
+				--warn: #eab308;
+				--danger: #ef4444;
+				--accent: #3b82f6;
+				--line: #25324f;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				font-family: "IBM Plex Sans", "Inter", system-ui, -apple-system, sans-serif;
+				background: radial-gradient(circle at top right, #1f2f52 0%, var(--bg) 45%);
+				color: var(--text);
+			}
+			main {
+				max-width: 980px;
+				margin: 0 auto;
+				padding: 20px;
+				display: grid;
+				gap: 16px;
+			}
+			.card {
+				background: linear-gradient(160deg, var(--surface) 0%, #0f1728 100%);
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				padding: 16px;
+			}
+			h1,
+			h2 {
+				margin: 0 0 12px 0;
+			}
+			p {
+				color: var(--muted);
+			}
+			form {
+				display: grid;
+				gap: 10px;
+			}
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 10px;
+			}
+			input,
+			select,
+			textarea,
+			button {
+				border-radius: 10px;
+				border: 1px solid var(--line);
+				background: var(--surface-soft);
+				color: var(--text);
+				padding: 10px 12px;
+				font: inherit;
+			}
+			textarea {
+				min-height: 90px;
+				resize: vertical;
+			}
+			button {
+				cursor: pointer;
+				background: linear-gradient(120deg, #3158ad, var(--accent));
+				border: none;
+				font-weight: 600;
+			}
+			button.secondary {
+				background: #273656;
+			}
+			button.warn {
+				background: #855f0a;
+			}
+			.small {
+				font-size: 12px;
+			}
+			.row {
+				display: flex;
+				gap: 10px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+			.stat {
+				background: #122039;
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				padding: 8px 10px;
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				font-size: 14px;
+			}
+			th,
+			td {
+				border-bottom: 1px solid var(--line);
+				text-align: left;
+				padding: 8px 6px;
+				vertical-align: top;
+			}
+			pre {
+				background: #0b1425;
+				padding: 12px;
+				border-radius: 10px;
+				overflow: auto;
+				max-height: 280px;
+				border: 1px solid var(--line);
+			}
+			.hidden {
+				display: none;
+			}
+			.notice {
+				padding: 10px;
+				border-radius: 10px;
+				background: #172746;
+				border: 1px solid #2a4277;
+				font-size: 14px;
+			}
+			.notice.error {
+				background: #3d1c1f;
+				border-color: #82424c;
+			}
+			.notice.success {
+				background: #163826;
+				border-color: #326f4e;
+			}
+			@media (max-width: 760px) {
+				.grid {
+					grid-template-columns: 1fr;
+				}
+				main {
+					padding: 12px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<section class="card">
+				<h1>DockDocket MVP</h1>
+				<p>Username/password authentication only. Track shipment discrepancies, generate claim packets, and purchase credits via Stripe.</p>
+				<div id="notice" class="notice hidden"></div>
+			</section>
+
+			<section id="authCard" class="card">
+				<h2>Register or Login</h2>
+				<div class="grid">
+					<form id="registerForm">
+						<strong>Create Account</strong>
+						<input name="organizationName" placeholder="Organization name" required />
+						<input name="username" placeholder="Username (lowercase)" required />
+						<input name="password" type="password" placeholder="Password (10+ chars)" required />
+						<button type="submit">Register</button>
+					</form>
+					<form id="loginForm">
+						<strong>Existing Account</strong>
+						<input name="username" placeholder="Username" required />
+						<input name="password" type="password" placeholder="Password" required />
+						<button type="submit">Login</button>
+					</form>
+				</div>
+			</section>
+
+			<section id="appCard" class="card hidden">
+				<div class="row">
+					<div class="stat">User: <strong id="whoami">-</strong></div>
+					<div class="stat">Credits: <strong id="creditBalance">0</strong></div>
+					<button id="refreshBtn" class="secondary" type="button">Refresh</button>
+					<button id="logoutBtn" class="warn" type="button">Logout</button>
+				</div>
+				<p class="small">Each claim packet generation consumes 1 credit.</p>
+			</section>
+
+			<section id="billingCard" class="card hidden">
+				<h2>Buy Credits (Stripe)</h2>
+				<div class="row">
+					<button data-pack="small" type="button">Small Pack (50)</button>
+					<button data-pack="medium" type="button">Medium Pack (200)</button>
+					<button data-pack="large" type="button">Large Pack (1000)</button>
+				</div>
+			</section>
+
+			<section id="shipmentCard" class="card hidden">
+				<h2>Create Shipment Record</h2>
+				<form id="shipmentForm">
+					<div class="grid">
+						<input name="supplierName" placeholder="Supplier name" required />
+						<input name="supplierReference" placeholder="Supplier reference (optional)" />
+						<input name="deliveryDate" type="datetime-local" required />
+						<input name="kind" placeholder="Discrepancy kind (shortage/damage/etc.)" required />
+						<input name="sku" placeholder="SKU" required />
+						<input name="expectedQty" type="number" min="0" placeholder="Expected qty" />
+						<input name="receivedQty" type="number" min="0" placeholder="Received qty" />
+						<input name="damagedQty" type="number" min="0" placeholder="Damaged qty" />
+					</div>
+					<textarea name="notes" placeholder="Shipment notes (optional)"></textarea>
+					<textarea name="discrepancyNotes" placeholder="Discrepancy notes (optional)"></textarea>
+					<button type="submit">Save Shipment</button>
+				</form>
+			</section>
+
+			<section id="listCard" class="card hidden">
+				<h2>Shipments</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Supplier</th>
+							<th>Delivery</th>
+							<th>Status</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody id="shipmentRows"></tbody>
+				</table>
+			</section>
+
+			<section id="packetCard" class="card hidden">
+				<h2>Latest Claim Packet</h2>
+				<pre id="packetOutput">{}</pre>
+			</section>
+		</main>
+
+		<script>
+			const noticeEl = document.getElementById("notice");
+			const authCard = document.getElementById("authCard");
+			const appCard = document.getElementById("appCard");
+			const billingCard = document.getElementById("billingCard");
+			const shipmentCard = document.getElementById("shipmentCard");
+			const listCard = document.getElementById("listCard");
+			const packetCard = document.getElementById("packetCard");
+			const whoamiEl = document.getElementById("whoami");
+			const creditBalanceEl = document.getElementById("creditBalance");
+			const shipmentRowsEl = document.getElementById("shipmentRows");
+			const packetOutputEl = document.getElementById("packetOutput");
+			const refreshBtn = document.getElementById("refreshBtn");
+			const logoutBtn = document.getElementById("logoutBtn");
+
+			function showNotice(message, type = "info") {
+				noticeEl.classList.remove("hidden", "error", "success");
+				noticeEl.textContent = message;
+				if (type === "error") noticeEl.classList.add("error");
+				if (type === "success") noticeEl.classList.add("success");
+			}
+
+			function clearNotice() {
+				noticeEl.classList.add("hidden");
+				noticeEl.textContent = "";
+				noticeEl.classList.remove("error", "success");
+			}
+
+			async function api(path, method = "GET", body) {
+				const res = await fetch(path, {
+					method,
+					headers: { "Content-Type": "application/json" },
+					body: body ? JSON.stringify(body) : undefined,
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) {
+					throw new Error(data.error || `Request failed: ${res.status}`);
+				}
+				return data;
+			}
+
+			function setAuthedUI(authed) {
+				authCard.classList.toggle("hidden", authed);
+				appCard.classList.toggle("hidden", !authed);
+				billingCard.classList.toggle("hidden", !authed);
+				shipmentCard.classList.toggle("hidden", !authed);
+				listCard.classList.toggle("hidden", !authed);
+				packetCard.classList.toggle("hidden", !authed);
+			}
+
+			async function refreshSession() {
+				try {
+					const me = await api("/api/me");
+					setAuthedUI(true);
+					whoamiEl.textContent = me.username;
+					creditBalanceEl.textContent = String(me.credits);
+					await loadShipments();
+					clearNotice();
+				} catch {
+					setAuthedUI(false);
+					packetOutputEl.textContent = "{}";
+				}
+			}
+
+			async function loadShipments() {
+				const data = await api("/api/shipments");
+				const rows = data.shipments || [];
+				if (!rows.length) {
+					shipmentRowsEl.innerHTML = `<tr><td colspan="4" class="small">No shipments yet.</td></tr>`;
+					return;
+				}
+
+				shipmentRowsEl.innerHTML = rows
+					.map((shipment) => {
+						const id = shipment.id;
+						const status = shipment.claim_status || "draft";
+						return `
+							<tr>
+								<td>
+									<div><strong>${shipment.supplier_name}</strong></div>
+									<div class="small">${shipment.supplier_reference || "-"}</div>
+								</td>
+								<td>${new Date(shipment.delivery_date).toLocaleString()}</td>
+								<td>${status}</td>
+								<td>
+									<div class="row">
+										<button class="secondary" data-action="packet" data-id="${id}" type="button">Generate Packet</button>
+										<select data-action="status" data-id="${id}">
+											<option value="draft">draft</option>
+											<option value="submitted">submitted</option>
+											<option value="accepted">accepted</option>
+											<option value="rejected">rejected</option>
+											<option value="partial">partial</option>
+										</select>
+										<button class="secondary" data-action="save-status" data-id="${id}" type="button">Save</button>
+									</div>
+								</td>
+							</tr>`;
+					})
+					.join("");
+
+				shipmentRowsEl.querySelectorAll('select[data-action="status"]').forEach((el) => {
+					const row = rows.find((r) => r.id === el.dataset.id);
+					if (row) el.value = row.claim_status || "draft";
+				});
+			}
+
+			document.getElementById("registerForm").addEventListener("submit", async (event) => {
+				event.preventDefault();
+				const form = new FormData(event.target);
+				try {
+					await api("/api/register", "POST", {
+						organizationName: form.get("organizationName"),
+						username: form.get("username"),
+						password: form.get("password"),
+					});
+					showNotice("Registration successful.", "success");
+					await refreshSession();
+				} catch (err) {
+					showNotice(err.message, "error");
+				}
+			});
+
+			document.getElementById("loginForm").addEventListener("submit", async (event) => {
+				event.preventDefault();
+				const form = new FormData(event.target);
+				try {
+					await api("/api/login", "POST", {
+						username: form.get("username"),
+						password: form.get("password"),
+					});
+					showNotice("Login successful.", "success");
+					await refreshSession();
+				} catch (err) {
+					showNotice(err.message, "error");
+				}
+			});
+
+			document.getElementById("shipmentForm").addEventListener("submit", async (event) => {
+				event.preventDefault();
+				const form = new FormData(event.target);
+				try {
+					const deliveryDateRaw = form.get("deliveryDate");
+					const deliveryDate = deliveryDateRaw ? new Date(deliveryDateRaw).toISOString() : null;
+					await api("/api/shipments", "POST", {
+						supplierName: form.get("supplierName"),
+						supplierReference: form.get("supplierReference"),
+						deliveryDate,
+						notes: form.get("notes"),
+						discrepancies: [
+							{
+								kind: form.get("kind"),
+								sku: form.get("sku"),
+								expectedQty: toIntOrNull(form.get("expectedQty")),
+								receivedQty: toIntOrNull(form.get("receivedQty")),
+								damagedQty: toIntOrNull(form.get("damagedQty")),
+								notes: form.get("discrepancyNotes"),
+							},
+						],
+					});
+					showNotice("Shipment saved.", "success");
+					event.target.reset();
+					await loadShipments();
+				} catch (err) {
+					showNotice(err.message, "error");
+				}
+			});
+
+			refreshBtn.addEventListener("click", refreshSession);
+
+			logoutBtn.addEventListener("click", async () => {
+				try {
+					await api("/api/logout", "POST", {});
+				} catch {}
+				setAuthedUI(false);
+				showNotice("Logged out.", "success");
+			});
+
+			shipmentRowsEl.addEventListener("click", async (event) => {
+				const button = event.target.closest("button");
+				if (!button) return;
+				const action = button.dataset.action;
+				const id = button.dataset.id;
+				if (!id) return;
+
+				try {
+					if (action === "packet") {
+						const data = await api(`/api/shipments/${id}/claim-packet`, "POST", {});
+						packetOutputEl.textContent = JSON.stringify(data.packet, null, 2);
+						creditBalanceEl.textContent = String(data.creditsRemaining);
+						showNotice("Claim packet generated.", "success");
+						await loadShipments();
+					}
+					if (action === "save-status") {
+						const select = shipmentRowsEl.querySelector(`select[data-action="status"][data-id="${id}"]`);
+						await api(`/api/shipments/${id}/status`, "POST", { status: select.value });
+						showNotice("Claim status updated.", "success");
+						await loadShipments();
+					}
+				} catch (err) {
+					showNotice(err.message, "error");
+				}
+			});
+
+			document.querySelectorAll("button[data-pack]").forEach((button) => {
+				button.addEventListener("click", async () => {
+					const packId = button.dataset.pack;
+					try {
+						const data = await api("/api/credits/purchase", "POST", { packId });
+						if (data.checkoutUrl) {
+							window.location.href = data.checkoutUrl;
+							return;
+						}
+						showNotice("Stripe checkout URL was not returned.", "error");
+					} catch (err) {
+						showNotice(err.message, "error");
+					}
+				});
+			});
+
+			function toIntOrNull(value) {
+				if (value === null || value === undefined || value === "") return null;
+				const n = Number.parseInt(value, 10);
+				return Number.isFinite(n) ? n : null;
+			}
+
+			refreshSession();
+		</script>
+	</body>
+</html>
