@@ -1,0 +1,25 @@
+name = "luna-docker-app"
+main = "src/index.ts"
+compatibility_date = "2025-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ENV = "development"
+CHAIN_ID = "80002"
+NETWORK_NAME = "polygon-amoy"
+
+[[d1_databases]]
+binding = "OD_DB"
+database_name = "luna-docker-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[env.development]
+name = "luna-docker-app-development"
+vars = { APP_ENV = "development", CHAIN_ID = "80002", NETWORK_NAME = "polygon-amoy" }
+
+[[env.development.d1_databases]]
+binding = "OD_DB"
+database_name = "luna-docker-db-development"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"

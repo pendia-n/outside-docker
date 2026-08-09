@@ -1,0 +1,36 @@
+{
+  "name": "luna-docker-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && wrangler deploy --dry-run --outdir=dist",
+    "db:migrate:local": "wrangler d1 migrations apply OD_DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply OD_DB --remote --env development",
+    "create:dev-tenant": "tsx scripts/create-dev-tenant.ts",
+    "smoke": "tsx scripts/smoke-amoy.ts",
+    "contracts:test": "cd contracts && forge test -vvv",
+    "contracts:build": "cd contracts && forge build"
+  },
+  "dependencies": {
+    "canonicalize": "^2.1.0",
+    "drizzle-orm": "^0.44.5",
+    "hono": "^4.9.2",
+    "viem": "^2.37.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.45",
+    "@cloudflare/workers-types": "^4.20250813.0",
+    "@types/node": "^22.15.21",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.30.0"
+  }
+}
