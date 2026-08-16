@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "outside-docker-sol-app",
+  "main": "./src/index.tsx",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "ENV": "dev",
+    "POLYGON_CHAIN_ID": "80002",
+    "POLYGON_CONTRACT_ADDRESS_DEV": "0x040A0b2189315F7EE13250503eF88ffA55Ab751C",
+    "POLYGON_CONTRACT_ADDRESS_PROD": ""
+  },
+  "d1_databases": [
+    {
+      "binding": "DB_DEV",
+      "database_name": "outside-docker-dev",
+      "database_id": "f39fe4d1-c95a-4710-bcd9-f5ec4b1871c0",
+      "migrations_dir": "migrations"
+    },
+    {
+      "binding": "DB_PROD",
+      "database_name": "outside-docker-prod",
+      "database_id": "baa8a217-5083-42e3-a3bb-584f11ed5b5e",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
