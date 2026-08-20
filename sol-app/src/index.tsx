@@ -1,129 +1,612 @@
-import { Hono } from 'hono'
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
+import { Contract, JsonRpcProvider, Wallet } from 'ethers'
+import { Hono, type Context } from 'hono'
+import { AccountError, createAccountRoutes } from './account-routes'
+import { PolygonAnchorService, createEthersAnchorClient, type EthersAnchorContractLike } from './anchor'
+import { AuthenticationError, AuthorizationError, RequestSecurityError } from './auth'
+import {
+  StripeApiError,
+  StripeRestClient,
+  StripeWebhookError,
+  createD1BillingEventHandler,
+  createD1StripeWebhookStore,
+  processStripeWebhook,
+} from './billing'
+import { DomainError, createChainDurableObject, durableObjectChainAppender } from './chain-do'
+import { databaseFor } from './db'
+import { ApplicationPage, CheckoutStatusPage, LandingPage, VerifyPage } from './pages'
+import { createProofPdfResponse } from './pdf'
+import {
+  activeEntitlement,
+  assertSessionMutation,
+  currentSession,
+  optionalSession,
+  requestDatabase,
+  requireSupplierMode,
+  type AppContext,
+  type SessionActor,
+} from './platform'
+import { consumeHumanWrite, machinePlanProvider } from './plans'
+import { ensureReceiptPublicKey, receiptSigner } from './receipt-keys'
+import { ReceiptError } from './receipts'
 import { renderer } from './renderer'
-import { contentCommitment, eventProof, passwordHash, randomHex, signJwt, verifyJwt, verifyPassword } from './crypto'
-import type { Env, Role, SessionClaims } from './types'
+import { createTrackHRoutes } from './track-h'
+import {
+  authenticateMachineApiKey,
+  createTrackMManagementRoutes,
+  createTrackMRoutes,
+} from './track-m'
+import type { Env } from './types'
+import { ValidationError, requirePlainRecord } from './validation'
+import {
+  VerifierService,
+  createVerifierRoutes,
+  verifyPortableProof,
+  type PortableProofV1,
+  type VerificationActor,
+} from './verifier'
 
-const app = new Hono<{ Bindings: Env }>()
-app.onError((error, c) => {
-  console.error(error)
-  return c.json({ error: c.env.ENV === 'dev' ? error.message : 'Internal Server Error' }, 500)
+type AppEnvironment = { Bindings: Env; Variables: { requestId: string } }
+type WorkerContext = Context<AppEnvironment>
+
+const app = new Hono<AppEnvironment>()
+const MAX_REQUEST_BYTES = 2_200_000
+
+function requestId(context: WorkerContext): string {
+  return context.get('requestId') || crypto.randomUUID()
+}
+
+function platformContext(context: WorkerContext): AppContext {
+  return context as unknown as AppContext
+}
+
+function statusOf(error: unknown): number {
+  if (
+    error instanceof AccountError
+    || error instanceof AuthenticationError
+    || error instanceof AuthorizationError
+    || error instanceof DomainError
+    || error instanceof RequestSecurityError
+    || error instanceof StripeApiError
+    || error instanceof StripeWebhookError
+  ) return error.status
+  if (error instanceof ValidationError || error instanceof ReceiptError) return 400
+  return 500
+}
+
+function codeOf(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') return error.code
+  return 'internal_error'
+}
+
+function publicMessage(error: unknown, environment: Env['ENV']): string {
+  if (statusOf(error) < 500 || environment === 'dev') return error instanceof Error ? error.message : 'Request failed'
+  return 'Internal Server Error'
+}
+
+app.use('*', async (context, next) => {
+  const id = context.req.header('CF-Ray') || crypto.randomUUID()
+  context.set('requestId', id)
+  const declaredLength = Number(context.req.header('Content-Length') || 0)
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+    return context.json({ error: 'Request body is too large', code: 'request_too_large', request_id: id }, 413)
+  }
+  await next()
+  context.header('X-Request-Id', id)
+  context.header('X-Content-Type-Options', 'nosniff')
+  context.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  context.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)')
+  context.header('Cross-Origin-Opener-Policy', 'same-origin')
+  context.header('Cross-Origin-Resource-Policy', 'same-origin')
+  context.header(
+    'Content-Security-Policy',
+    "default-src 'self'; base-uri 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'",
+  )
+  if (new URL(context.req.url).protocol === 'https:') {
+    context.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
 })
+
+app.onError((error, context) => {
+  const status = statusOf(error)
+  if (status >= 500) console.error(error)
+  return context.json({
+    error: publicMessage(error, context.env.ENV),
+    code: codeOf(error),
+    request_id: requestId(context),
+  }, status as any)
+})
+
 app.use(renderer)
 
-function db(c: { env: Env }): D1Database {
-  return c.env.ENV === 'prod' ? c.env.DB_PROD : c.env.DB_DEV
-}
-function contractAddress(c: { env: Env }): string {
-  return c.env.ENV === 'prod' ? c.env.POLYGON_CONTRACT_ADDRESS_PROD : c.env.POLYGON_CONTRACT_ADDRESS_DEV
-}
-
-const USERNAME = /^[a-z0-9_-]{3,32}$/
-const PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{7,}$/
-
-function nowSeconds() { return Math.floor(Date.now() / 1000) }
-function normalizeUsername(value: string) { return value.trim().toLowerCase() }
-function jsonError(c: any, message: string, status = 400) { return c.json({ error: message }, status) }
-
-async function session(c: any): Promise<SessionClaims | null> {
-  const token = getCookie(c, 'od_session')
-  return token ? verifyJwt(token, c.env.JWT_SECRET) : null
+function required(environment: Env, field: keyof Env): string {
+  const value = environment[field]
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new AccountError(503, 'configuration_required', `${String(field)} is not configured`)
+  }
+  return value.trim()
 }
 
-app.get('/health', (c) => c.json({ ok: true, app: 'outside-docker', env: c.env.ENV, db: Boolean(db(c)), polygon_chain_id: c.env.POLYGON_CHAIN_ID }))
+function applicationOrigin(context: WorkerContext): string {
+  const parsed = new URL(context.env.APP_ORIGIN || new URL(context.req.url).origin)
+  if (context.env.ENV === 'prod' && parsed.protocol !== 'https:') {
+    throw new AccountError(503, 'configuration_required', 'APP_ORIGIN must use HTTPS in production')
+  }
+  return parsed.origin
+}
 
-app.get('/api/username/:username', async (c) => {
-  const username = normalizeUsername(c.req.param('username'))
-  if (!USERNAME.test(username)) return c.json({ available: false, reason: 'invalid' })
-  const row = await db(c).prepare('SELECT 1 FROM users WHERE username = ? LIMIT 1').bind(username).first()
-  return c.json({ available: !row })
+function sessionVerificationActor(actor: SessionActor): VerificationActor {
+  return { userId: actor.user.id, role: actor.user.role }
+}
+
+async function sessionFor(context: WorkerContext): Promise<SessionActor | null> {
+  return optionalSession(platformContext(context))
+}
+
+async function requireSupplier(context: WorkerContext): Promise<SessionActor> {
+  const actor = await currentSession(platformContext(context))
+  if (actor.user.role !== 'supplier') throw new AuthorizationError('Supplier access required', 403, 'supplier_required')
+  return actor
+}
+
+function stripeClient(environment: Env): StripeRestClient {
+  return new StripeRestClient({ apiKey: required(environment, 'STRIPE_API_KEY') })
+}
+
+export const ChainCoordinator = createChainDurableObject<Env>({
+  database: databaseFor,
+  environment: (environment) => environment.ENV,
+  signer: async (environment) => {
+    await ensureReceiptPublicKey(databaseFor(environment), environment)
+    return receiptSigner(environment)
+  },
 })
 
-app.post('/api/register', async (c) => {
-  if (c.env.ENV !== 'dev') return jsonError(c, 'Production registration requires payment webhook; not enabled in Phase 1', 402)
-  const body = await c.req.json<Partial<{ username: string; password: string; email: string; role: Role; organization: string; address_line1: string; city: string; postal_code: string; country: string }>>()
-  const username = normalizeUsername(body.username ?? '')
-  const password = body.password ?? ''
-  const role = body.role
-  if (!USERNAME.test(username)) return jsonError(c, 'Username must be 3-32 lowercase letters, numbers, _ or -')
-  if (!PASSWORD.test(password)) return jsonError(c, 'Password requires upper, lower, digit, symbol and minimum length 7')
-  if (role !== 'supplier' && role !== 'verifier') return jsonError(c, 'Role must be supplier or verifier')
-  if (role === 'supplier' && (!body.organization || !body.address_line1 || !body.city || !body.postal_code || !body.country)) return jsonError(c, 'Supplier organization and address are required')
-  const exists = await db(c).prepare('SELECT 1 FROM users WHERE username = ?').bind(username).first()
-  if (exists) return jsonError(c, 'Username is already registered', 409)
-  const id = crypto.randomUUID()
-  const hash = await passwordHash(password)
-  const statements = [db(c).prepare('INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(id, username, body.email?.trim() || null, hash, role)]
-  if (role === 'supplier') statements.push(db(c).prepare('INSERT INTO organizations (id, user_id, legal_name, address_line1, city, postal_code, country) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), id, body.organization, body.address_line1, body.city, body.postal_code, body.country))
-  await db(c).batch(statements)
-  return c.json({ created: true, username, role }, 201)
+app.get('/', (context) => context.render(<LandingPage />))
+app.get('/app', (context) => context.render(<ApplicationPage />))
+app.get('/verify', (context) => context.render(<VerifyPage />))
+app.get('/verify/:token', (context) => context.render(<VerifyPage shareToken={context.req.param('token')} />))
+app.get('/checkout/success', (context) => context.render(<CheckoutStatusPage state="success" />))
+app.get('/checkout/cancelled', (context) => context.render(<CheckoutStatusPage state="cancelled" />))
+
+app.get('/health', (context) => context.json({
+  ok: true,
+  app: 'outside-docker',
+  environment: context.env.ENV,
+  database: context.env.ENV === 'prod' ? 'DB_PROD' : 'DB_DEV',
+  polygon_chain_id: context.env.POLYGON_CHAIN_ID,
+}))
+
+app.route('/api', createAccountRoutes())
+
+const chainAppender = (context: WorkerContext) => durableObjectChainAppender(context.env.CHAIN_COORDINATOR)
+
+app.route('/api/h', createTrackHRoutes({
+  database: (context) => requestDatabase(context),
+  chainAppender,
+  authenticate: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? { userId: actor.user.id, role: actor.user.role, sessionId: actor.sessionId } : null
+  },
+  authorizeWrite: async (_publicActor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+    requireSupplierMode(actor, 'H')
+    await consumeHumanWrite(requestDatabase(context), actor.user.id)
+  },
+}))
+
+app.route('/api/v1', createTrackMRoutes({
+  database: (context) => requestDatabase(context),
+  chainAppender,
+  plans: (context) => machinePlanProvider(requestDatabase(context)),
+  environment: (context) => context.env.ENV,
+  authenticateApiKey: (context) => authenticateMachineApiKey(
+    requestDatabase(context),
+    context.req.header('Authorization'),
+    context.env.ENV,
+  ),
+  authenticateOwner: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? { userId: actor.user.id, role: actor.user.role } : null
+  },
+  authorizeSourceWrite: async (_publicActor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+    requireSupplierMode(actor, 'M')
+  },
+}))
+
+app.route('/api', createTrackMManagementRoutes({
+  database: (context) => requestDatabase(context),
+  environment: (context) => context.env.ENV,
+  authenticateOwner: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? { userId: actor.user.id, role: actor.user.role } : null
+  },
+  authorizeKeyWrite: async (_publicActor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+    requireSupplierMode(actor, 'M')
+  },
+}))
+
+app.route('/api/evidence', createVerifierRoutes({
+  database: (context) => requestDatabase(context),
+  authenticate: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? sessionVerificationActor(actor) : null
+  },
+  authorizeSupplierPublish: async (_publicActor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+    if (actor.user.role !== 'supplier' || !activeEntitlement(actor, 'writer_plan')) {
+      throw new AuthorizationError('An active supplier plan is required', 402, 'entitlement_required')
+    }
+  },
+}))
+
+app.get('/api/receipt-public-key', async (context) => {
+  const database = requestDatabase(context)
+  const requested = context.req.query('key_id')?.trim()
+  if (!requested) {
+    const document = await ensureReceiptPublicKey(database, context.env)
+    return context.json({ ...document, jwk: document.public_key_jwk, public_key_id: document.key_id })
+  }
+  const row = await database.prepare(`
+    SELECT id, environment, algorithm, public_key_jwk
+    FROM receipt_signing_keys
+    WHERE id = ? AND environment = ? AND status IN ('active', 'retired') LIMIT 1
+  `).bind(requested, context.env.ENV).first<{
+    id: string
+    environment: Env['ENV']
+    algorithm: string
+    public_key_jwk: string
+  }>()
+  if (!row) throw new DomainError(404, 'receipt_key_not_found', 'Receipt verification key not found')
+  const jwk = JSON.parse(row.public_key_jwk) as JsonWebKey
+  return context.json({
+    version: 'OD-RECEIPT-KEY-1',
+    environment: row.environment,
+    key_id: row.id,
+    public_key_id: row.id,
+    algorithm: row.algorithm,
+    public_key_jwk: jwk,
+    jwk,
+  })
 })
 
-app.post('/api/login', async (c) => {
-  const body = await c.req.json<{ username?: string; password?: string }>()
-  const username = normalizeUsername(body.username ?? '')
-  const user = await db(c).prepare('SELECT id, username, password_hash, role, is_active FROM users WHERE username = ?').bind(username).first<{ id: string; username: string; password_hash: string; role: Role; is_active: number }>()
-  if (!user || !user.is_active || !(await verifyPassword(body.password ?? '', user.password_hash))) return jsonError(c, 'Invalid credentials', 401)
-  const iat = nowSeconds()
-  const claims: SessionClaims = { sub: user.id, username: user.username, role: user.role, type: 'session', iat, exp: iat + 28 * 24 * 60 * 60 }
-  const token = await signJwt(claims, c.env.JWT_SECRET)
-  setCookie(c, 'od_session', token, { httpOnly: true, secure: c.env.ENV === 'prod', sameSite: 'Strict', path: '/', maxAge: 28 * 24 * 60 * 60 })
-  return c.json({ logged_in: true, username: user.username, role: user.role })
+async function trustedReceiptKeys(database: D1Database, environment: Env['ENV']): Promise<Record<string, JsonWebKey>> {
+  const rows = await database.prepare(`
+    SELECT id, public_key_jwk FROM receipt_signing_keys
+    WHERE environment = ? AND status IN ('active', 'retired')
+  `).bind(environment).all<{ id: string; public_key_jwk: string }>()
+  return Object.fromEntries(rows.results.map((row) => [row.id, JSON.parse(row.public_key_jwk) as JsonWebKey]))
+}
+
+function polygonVerifier(environment: Env) {
+  return async (anchor: NonNullable<PortableProofV1['anchor']>): Promise<boolean> => {
+    const configuredAddress = environment.ENV === 'prod'
+      ? required(environment, 'POLYGON_CONTRACT_ADDRESS_PROD')
+      : required(environment, 'POLYGON_CONTRACT_ADDRESS_DEV')
+    if (
+      anchor.chain_id !== environment.POLYGON_CHAIN_ID
+      || anchor.contract_address.toLowerCase() !== configuredAddress.toLowerCase()
+      || !environment.POLYGON_RPC_URL
+    ) return false
+    const provider = new JsonRpcProvider(
+      environment.POLYGON_RPC_URL,
+      Number(environment.POLYGON_CHAIN_ID),
+      { staticNetwork: true },
+    )
+    const contract = new Contract(configuredAddress, [
+      'function anchorIdByBatch(bytes32 batchId) view returns (uint256)',
+      'function verify(uint256 anchorId, bytes32 merkleRoot, bytes32 manifestHash) view returns (bool)',
+      'event AnchorBatch(uint256 indexed anchorId, bytes32 indexed batchId, bytes32 indexed merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount, uint64 anchoredAt)',
+    ], provider)
+    const batchId = `0x${anchor.batch_ref.replace(/^0x/u, '')}`
+    const merkleRoot = `0x${anchor.merkle_root.replace(/^0x/u, '')}`
+    const manifestHash = `0x${anchor.manifest_hash.replace(/^0x/u, '')}`
+    const anchorId = await contract.anchorIdByBatch(batchId) as bigint
+    if (anchorId <= 0n) return false
+    if (!await contract.verify(anchorId, merkleRoot, manifestHash)) return false
+
+    const receipt = await provider.getTransactionReceipt(anchor.transaction_hash)
+    if (
+      !receipt
+      || receipt.status !== 1
+      || receipt.to?.toLowerCase() !== configuredAddress.toLowerCase()
+      || anchor.block_number == null
+      || receipt.blockNumber !== anchor.block_number
+      || !anchor.block_hash
+      || receipt.blockHash.toLowerCase() !== anchor.block_hash.toLowerCase()
+    ) return false
+    return receipt.logs.some((log) => {
+      if (log.address.toLowerCase() !== configuredAddress.toLowerCase()) return false
+      try {
+        const parsed = contract.interface.parseLog({ topics: [...log.topics], data: log.data })
+        return parsed?.name === 'AnchorBatch'
+          && String(parsed.args.batchId).toLowerCase() === batchId.toLowerCase()
+          && String(parsed.args.merkleRoot).toLowerCase() === merkleRoot.toLowerCase()
+          && String(parsed.args.manifestHash).toLowerCase() === manifestHash.toLowerCase()
+          && BigInt(parsed.args.anchorId) === anchorId
+      } catch {
+        return false
+      }
+    })
+  }
+}
+
+app.post('/api/verify-proof', async (context) => {
+  const body = requirePlainRecord(await context.req.json(), 'proof verification')
+  const proof = body.proof as PortableProofV1
+  if (!proof || typeof proof !== 'object') throw new ValidationError('proof is required', 'invalid_proof', 'proof')
+  const result = await verifyPortableProof(proof, {
+    trustedPublicKeys: await trustedReceiptKeys(requestDatabase(context), context.env.ENV),
+    expectedEnvironment: context.env.ENV,
+    verifyPolygonAnchor: proof.anchor ? polygonVerifier(context.env) : undefined,
+    requirePolygon: Boolean(proof.anchor),
+  })
+  return context.json(result, result.valid ? 200 : 422)
 })
 
-app.post('/api/logout', (c) => { deleteCookie(c, 'od_session', { path: '/' }); return c.json({ logged_out: true }) })
-
-app.get('/api/session', async (c) => { const claims = await session(c); return claims ? c.json({ authenticated: true, claims }) : c.json({ authenticated: false }, 401) })
-
-app.post('/api/commitment', async (c) => {
-  const claims = await session(c)
-  if (!claims) return jsonError(c, 'Login required', 401)
-  const body = await c.req.json<{ track?: 'H' | 'M'; chain_ref?: string; commitment?: string; manifest_hash?: string; encrypted_capsule?: string }>()
-  if (body.track !== 'H' && body.track !== 'M') return jsonError(c, 'track must be H or M')
-  if (!body.chain_ref || !body.commitment || !body.manifest_hash) return jsonError(c, 'chain_ref, commitment and manifest_hash are required')
-  const chain = await db(c).prepare('SELECT id, previous_proof, next_position FROM chains WHERE owner_id = ? AND track = ? AND external_ref = ?').bind(claims.sub, body.track, body.chain_ref).first<{ id: string; previous_proof: string | null; next_position: number }>()
-  const chainId = chain?.id ?? crypto.randomUUID()
-  const previousProof = chain?.previous_proof ?? null
-  const position = chain?.next_position ?? 1
-  const createdAt = new Date().toISOString()
-  const proof = await eventProof(body.commitment, previousProof, position, createdAt)
-  const eventId = crypto.randomUUID()
-  const receipt = JSON.stringify({ version: '1', event_id: eventId, chain_id: chainId, position, commitment: body.commitment, manifest_hash: body.manifest_hash, previous_proof: previousProof, proof, created_at: createdAt })
-  const signature = await signJwt({ sub: eventId, username: 'receipt', role: claims.role, type: 'session', iat: nowSeconds(), exp: nowSeconds() + 315360000 } as SessionClaims, c.env.JWT_SECRET)
-  const statements = []
-  if (!chain) statements.push(db(c).prepare('INSERT INTO chains (id, owner_id, track, external_ref, previous_proof, next_position) VALUES (?, ?, ?, ?, ?, ?)').bind(chainId, claims.sub, body.track, body.chain_ref, proof, 2))
-  else statements.push(db(c).prepare('UPDATE chains SET previous_proof = ?, next_position = ? WHERE id = ?').bind(proof, position + 1, chainId))
-  statements.push(db(c).prepare('INSERT INTO events (id, chain_id, owner_id, position, commitment, manifest_hash, encrypted_capsule, previous_proof, proof, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, chainId, claims.sub, position, body.commitment, body.manifest_hash, body.encrypted_capsule ?? null, previousProof, proof, createdAt))
-  statements.push(db(c).prepare('INSERT INTO receipts (id, event_id, receipt_json, signature, signing_key_id) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), eventId, receipt, signature, 'dev-jwt-hs256'))
-  await db(c).batch(statements)
-  return c.json({ event_id: eventId, chain_id: chainId, position, proof, previous_proof: previousProof, receipt, signature, polygon_contract: contractAddress(c) })
+app.get('/api/verifier/scopes', async (context) => {
+  const actor = await currentSession(platformContext(context))
+  if (actor.user.role !== 'verifier') throw new AuthorizationError('Verifier access required', 403, 'verifier_required')
+  const now = new Date().toISOString()
+  const scopes = await requestDatabase(context).prepare(`
+    SELECT sc.id, sc.scope_type, sc.scope_ref, sc.title, sc.summary, sc.published_at,
+           e.valid_from, e.valid_until, e.status AS entitlement_status
+    FROM entitlements e JOIN evidence_scopes sc ON sc.id = e.scope_id
+    WHERE e.user_id = ? AND e.kind = 'read_pass' AND e.status = 'active'
+      AND e.valid_from <= ? AND e.valid_until > ? AND sc.status = 'published'
+    ORDER BY e.valid_until ASC, sc.title ASC
+  `).bind(actor.user.id, now, now).all<Record<string, unknown>>()
+  return context.json({ scopes: scopes.results })
 })
 
-app.get('/', (c) => c.render(
-  <main>
-    <nav class="nav"><a class="brand" href="#top"><img class="brand-logo" src="/od.svg" alt="Outside Docker logo"/><span>Outside Docker</span></a><div class="nav-links"><a href="#how">How it works</a><a href="#faq">FAQ</a><a href="mailto:pendia-community@protonmail.com">Contact</a><a class="nav-login" href="#access">Sign in</a><a class="button button-small" href="#access">Get started</a></div></nav>
-    <section id="top" class="hero-wrap"><div class="hero-copy"><p class="eyebrow">EVENT-CHAIN INTEGRITY FOR THE REAL WORLD</p><h1>Make every record<br/><em>defensible.</em></h1><p class="hero-lede">Outside Docker preserves the integrity of human documents and machine logs without storing the original content. Capture what happened. Prove what changed. Show the chain.</p><div class="hero-actions"><a class="button" href="#access">Create your account <span>→</span></a><a class="text-link" href="#how">See how it works <span>↓</span></a></div><p class="micro-note"><span class="status-dot"></span> Client-side commitments · SHA-256 · Polygon anchoring</p></div><div class="hero-art" aria-label="Illustration of a protected event chain"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="proof-card"><div class="proof-top"><span class="live-dot"></span><span>CHAIN STATUS</span><strong>INTACT</strong></div><div class="proof-line"><span class="node active"></span><span class="line"></span><span class="node active"></span><span class="line"></span><span class="node active"></span><span class="line"></span><span class="node active"></span></div><div class="proof-meta"><span>EVENT 001</span><span>EVENT 002</span><span>EVENT 003</span><span>ANCHORED</span></div><div class="proof-hash">sha256 · 7f9c...a42e</div></div></div></section>
-    <section class="trust-strip"><span>BUILT FOR EVIDENCE THAT NEEDS TO LAST</span><div><span>LEGAL &amp; COMPLIANCE</span><span>INSURANCE</span><span>ROBOTICS</span><span>INVESTIGATIONS</span></div></section>
-    <section id="how" class="section"><div class="section-intro"><p class="eyebrow">ONE RECORD. THREE LAYERS.</p><h2>Integrity you can explain<br/>to anyone.</h2><p>OD does not ask people to trust a black box. Its proof model is simple enough to inspect and strong enough to preserve a sequence of events.</p></div><div class="feature-grid"><article class="feature-card"><span class="feature-number">01</span><h3>Capture privately</h3><p>Hash a document, image, JSON payload, or machine record. The original can remain in your own systems.</p></article><article class="feature-card"><span class="feature-number">02</span><h3>Link the sequence</h3><p>Each event is chained to the one before it. Insertion, deletion, and reordering become visible.</p></article><article class="feature-card"><span class="feature-number">03</span><h3>Anchor independently</h3><p>Merkle roots are anchored on Polygon so the integrity record remains checkable beyond the platform.</p></article></div></section>
-    <section class="split-section"><div class="split-panel terracotta"><p class="eyebrow light">TRACK H · HUMAN RECORDS</p><h2>For documents that may matter later.</h2><p>Evidence packages, inspection reports, claims, internal investigations, and compliance records. Upload to hash, then keep the source under your own control.</p><a class="light-link" href="#access">Preserve a document <span>→</span></a></div><div class="split-panel sage"><p class="eyebrow">TRACK M · MACHINE RECORDS</p><h2>For systems that never stop producing data.</h2><p>Drones, robots, sensors, automation lines, and APIs can send structured records programmatically. The dashboard stays read-only; machines use the API.</p><a class="dark-link" href="#access">Prepare for machine data <span>→</span></a></div></section>
-    <section class="section steps-section"><div class="section-intro"><p class="eyebrow">FROM CAPTURE TO PROOF</p><h2>A clear record of<br/>what happened.</h2></div><div class="steps"><div><span>1</span><h3>Commit</h3><p>Generate a content hash and client-side commitment without sending your passcode to OD.</p></div><div><span>2</span><h3>Receive</h3><p>Get a signed receipt and portable <code>.odproof</code> capsule for your own records.</p></div><div><span>3</span><h3>Verify</h3><p>Share a proof with a reviewer. A Read Pass opens the relevant event workspace for 30 days.</p></div></div></section>
-    <section id="access" class="access-section"><div><p class="eyebrow light">READY WHEN YOU ARE</p><h2>Start with a private<br/>integrity record.</h2><p>Create a dev account to explore the workflow. Production access will be activated through the applicable plan or Read Pass.</p></div><div class="access-card"><div class="access-tabs"><a class="active" href="#register-card">Create account</a><a href="#login-card">Sign in</a></div><section id="register-card"><form id="register"><label>Username<input name="username" required pattern="[a-z0-9_-]{3,32}" /></label><p id="availability" class="hint"></p><label>Password<input name="password" type="password" required minLength={7} /></label><p class="hint">At least 7 characters: upper, lower, digit, symbol.</p><label>Role<select name="role"><option value="supplier">Supplier</option><option value="verifier">Verifier</option></select></label><label>Email <span class="optional">optional</span><input name="email" type="email" /></label><div id="org"><label>Organization<input name="organization" /></label><label>Address<input name="address_line1" /></label><div class="grid"><label>City<input name="city" /></label><label>Postal code<input name="postal_code" /></label></div><label>Country<input name="country" /></label></div><button class="button" type="submit">Create dev account <span>→</span></button></form><pre id="register-result"></pre></section><section id="login-card" class="login-panel"><h3>Welcome back</h3><form id="login"><label>Username<input name="username" required /></label><label>Password<input name="password" type="password" required /></label><button class="button" type="submit">Sign in <span>→</span></button></form><pre id="login-result"></pre></section></div></section>
-    <section id="faq" class="faq-section"><div class="section-intro"><p class="eyebrow">QUESTIONS, ANSWERED</p><h2>Good records deserve<br/>clear explanations.</h2></div><div class="faq-list"><details open={true}><summary>Does Outside Docker store my original PDF or image?</summary><p>In the Phase 1 integrity workflow, OD stores hashes, commitments, chain proofs, and receipts—not the original content. You retain the source file in your own storage.</p></details><details><summary>Does a hash prove that the underlying content is true?</summary><p>No. It proves that the captured representation has not changed after capture. Truthfulness, authorship, and the quality of the capture process remain matters for the submitting organization and reviewer.</p></details><details><summary>What is the difference between Track H and Track M?</summary><p>Track H is for human-submitted documents and case-based evidence. Track M is for automated machine records submitted through an API key; its dashboard is designed for reading and monitoring, not manual data entry.</p></details><details><summary>Can someone verify a record without being a lawyer?</summary><p>Yes. A verifier is a reader of the integrity record, not a legal certification authority. The verifier can inspect the selected event scope and proof chain. Legal interpretation remains with qualified professionals.</p></details><details><summary>Who can I contact?</summary><p>For product questions, access, or partnership requests, email <a href="mailto:pendia-community@protonmail.com">pendia-community@protonmail.com</a> or <a href="mailto:earthlyfirely@gmail.com">earthlyfirely@gmail.com</a>.</p></details></div></section>
-    <footer class="footer"><div class="brand"><img class="brand-logo" src="/od.svg" alt="Outside Docker logo"/><span>Outside Docker</span></div><p>Integrity infrastructure for human and machine records.</p><div><a href="mailto:pendia-community@protonmail.com">pendia-community@protonmail.com</a><a href="mailto:earthlyfirely@gmail.com">earthlyfirely@gmail.com</a></div><small>© 2026 Outside Docker · Integrity preservation, not a truth guarantee.</small></footer>
-    <script dangerouslySetInnerHTML={{__html: `
-      const reg=document.querySelector('#register'), role=reg.querySelector('[name=role]'), org=document.querySelector('#org'), out=document.querySelector('#register-result');
-      role.onchange=()=>org.hidden=role.value!=='supplier'; org.hidden=false;
-      let timer; reg.username.oninput=()=>{clearTimeout(timer); timer=setTimeout(async()=>{const v=reg.username.value.toLowerCase();const r=await fetch('/api/username/'+encodeURIComponent(v));const j=await r.json();document.querySelector('#availability').textContent=j.available?'✓ Available':j.reason==='invalid'?'Invalid username':'Already registered'},250)};
-      reg.onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(reg));const r=await fetch('/api/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});out.textContent=JSON.stringify(await r.json(),null,2)};
-      document.querySelector('#login').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(f)))});document.querySelector('#login-result').textContent=JSON.stringify(await r.json(),null,2)};
-      const registerPanel=document.querySelector('#register-card'), loginPanel=document.querySelector('#login-card'), tabs=[...document.querySelectorAll('.access-tabs a')];
-      const showAccess=mode=>{const login=mode==='login';registerPanel.style.display=login?'none':'block';loginPanel.style.display=login?'block':'none';tabs.forEach(tab=>tab.classList.toggle('active',login?tab.getAttribute('href')==='#login-card':tab.getAttribute('href')==='#register-card'));document.querySelector('#access').scrollIntoView({behavior:'smooth',block:'start'});};
-      tabs.forEach(tab=>tab.addEventListener('click',e=>{e.preventDefault();showAccess(tab.getAttribute('href')==='#login-card'?'login':'register');history.replaceState(null,'',tab.getAttribute('href'));}));
-      document.querySelectorAll('a[href="#login-card"]').forEach(link=>link.addEventListener('click',e=>{e.preventDefault();showAccess('login');history.replaceState(null,'','#login-card');}));
-      if(location.hash==='#login-card') showAccess('login');
-      window.addEventListener('hashchange',()=>{if(location.hash==='#login-card')showAccess('login');});
-    `}} />
-  </main>
-))
+app.get('/api/verifier/scopes/:scopeId', async (context) => {
+  const actor = await currentSession(platformContext(context))
+  if (actor.user.role !== 'verifier') throw new AuthorizationError('Verifier access required', 403, 'verifier_required')
+  const service = new VerifierService(requestDatabase(context))
+  const scopeId = context.req.param('scopeId')
+  return context.json({
+    scope: await service.paidScope(actor.user.id, scopeId),
+    events: await service.paidEvents(actor.user.id, scopeId),
+  })
+})
 
-export default app
+async function availableShareScopes(database: D1Database, ownerId: string): Promise<Record<string, unknown>[]> {
+  const [published, humanCases] = await Promise.all([
+    database.prepare(`
+      SELECT id, title, scope_type, scope_ref, status
+      FROM evidence_scopes WHERE owner_id = ? AND status = 'published'
+      ORDER BY published_at DESC, created_at DESC
+    `).bind(ownerId).all<Record<string, unknown>>(),
+    database.prepare(`
+      SELECT 'case:' || c.id AS id, c.title, 'case' AS scope_type,
+             c.case_ref AS scope_ref, 'ready_to_publish' AS status
+      FROM cases c
+      WHERE c.owner_id = ? AND EXISTS (SELECT 1 FROM events e WHERE e.case_id = c.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM evidence_scopes sc
+          WHERE sc.owner_id = c.owner_id AND sc.scope_type = 'case'
+            AND sc.scope_ref = c.case_ref AND sc.status = 'published'
+        )
+      ORDER BY c.updated_at DESC
+    `).bind(ownerId).all<Record<string, unknown>>(),
+  ])
+  return [...published.results, ...humanCases.results]
+}
+
+app.get('/api/shares', async (context) => {
+  const actor = await currentSession(platformContext(context))
+  if (actor.user.role !== 'supplier') return context.json({ shares: [], available_scopes: [] })
+  const database = requestDatabase(context)
+  const shares = await database.prepare(`
+    SELECT s.id, s.scope_id, sc.title AS scope_title, s.token_prefix, s.include_pdf,
+           s.status, s.max_views, s.view_count, s.expires_at, s.revoked_at,
+           s.last_accessed_at, s.created_at
+    FROM shares s JOIN evidence_scopes sc ON sc.id = s.scope_id
+    WHERE s.owner_id = ? ORDER BY s.created_at DESC LIMIT 100
+  `).bind(actor.user.id).all<Record<string, unknown>>()
+  return context.json({ shares: shares.results, available_scopes: await availableShareScopes(database, actor.user.id) })
+})
+
+async function resolveShareScope(database: D1Database, actor: SessionActor, requested: string): Promise<string> {
+  if (!requested.startsWith('case:')) return requested
+  const caseId = requested.slice('case:'.length)
+  const humanCase = await database.prepare(`
+    SELECT id, case_ref, title, description FROM cases WHERE id = ? AND owner_id = ? LIMIT 1
+  `).bind(caseId, actor.user.id).first<{ id: string; case_ref: string; title: string; description: string | null }>()
+  if (!humanCase) throw new DomainError(404, 'case_not_found', 'Case not found')
+  const service = new VerifierService(database)
+  let scope = await database.prepare(`
+    SELECT id, status FROM evidence_scopes
+    WHERE owner_id = ? AND scope_type = 'case' AND scope_ref = ? LIMIT 1
+  `).bind(actor.user.id, humanCase.case_ref).first<{ id: string; status: string }>()
+  if (!scope) {
+    const eventRows = await database.prepare(`
+      SELECT id FROM events WHERE owner_id = ? AND case_id = ? ORDER BY position ASC
+    `).bind(actor.user.id, humanCase.id).all<{ id: string }>()
+    const created = await service.createScope(actor.user.id, {
+      scope_type: 'case',
+      scope_ref: humanCase.case_ref,
+      title: humanCase.title,
+      summary: humanCase.description,
+      event_ids: eventRows.results.map((event) => event.id),
+    })
+    scope = { id: created.id, status: created.status }
+  }
+  if (scope.status === 'draft') await service.publishScope(actor.user.id, scope.id)
+  else if (scope.status !== 'published') throw new DomainError(409, 'scope_not_publishable', 'This evidence scope cannot be shared')
+  return scope.id
+}
+
+app.post('/api/shares', async (context) => {
+  const actor = await requireSupplier(context)
+  await assertSessionMutation(platformContext(context), actor)
+  if (!activeEntitlement(actor, 'writer_plan')) {
+    throw new AuthorizationError('An active supplier plan is required', 402, 'entitlement_required')
+  }
+  const body = requirePlainRecord(await context.req.json(), 'share')
+  if (typeof body.scope_id !== 'string' || !body.scope_id.trim()) {
+    throw new ValidationError('scope_id is required', 'required', 'scope_id')
+  }
+  const days = Number(body.expires_days ?? 30)
+  if (!Number.isSafeInteger(days) || days < 1 || days > 365) {
+    throw new ValidationError('expires_days must be 1-365', 'invalid_expiry', 'expires_days')
+  }
+  const database = requestDatabase(context)
+  const scopeId = await resolveShareScope(database, actor, body.scope_id.trim())
+  const created = await new VerifierService(database).createShare(actor.user.id, scopeId, {
+    expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+    include_pdf: true,
+    max_views: body.max_views == null || body.max_views === '' ? null : Number(body.max_views),
+  })
+  return context.json({
+    ...created,
+    share_url: `${applicationOrigin(context)}/verify/${encodeURIComponent(created.token)}`,
+  }, 201)
+})
+
+app.get('/api/public/shares/:token', async (context) => {
+  return context.json(await new VerifierService(requestDatabase(context)).resolveShare(context.req.param('token')))
+})
+
+app.get('/api/public/shares/:token/events/:eventId/proof', async (context) => {
+  const service = new VerifierService(requestDatabase(context))
+  const shared = await service.resolveShare(context.req.param('token'))
+  return context.json(await service.portableProof(context.req.param('eventId'), undefined, shared.scope.id))
+})
+
+app.get('/api/public/shares/:token/events/:eventId/proof.pdf', async (context) => {
+  const service = new VerifierService(requestDatabase(context))
+  const shared = await service.resolveShare(context.req.param('token'))
+  if (!shared.include_pdf) throw new DomainError(403, 'pdf_not_shared', 'This share does not include PDF export')
+  const proof = await service.portableProof(context.req.param('eventId'), undefined, shared.scope.id)
+  return createProofPdfResponse(proof)
+})
+
+app.get('/api/events/:eventId/proof', async (context) => {
+  const actor = await requireSupplier(context)
+  return context.json(await new VerifierService(requestDatabase(context)).portableProof(
+    context.req.param('eventId'),
+    actor.user.id,
+  ))
+})
+
+app.get('/api/events/:eventId/proof.pdf', async (context) => {
+  const actor = await requireSupplier(context)
+  const proof = await new VerifierService(requestDatabase(context)).portableProof(
+    context.req.param('eventId'),
+    actor.user.id,
+  )
+  return createProofPdfResponse(proof)
+})
+
+async function billingPortal(context: WorkerContext, idempotencyPrefix: string): Promise<string> {
+  const actor = await currentSession(platformContext(context))
+  await assertSessionMutation(platformContext(context), actor)
+  const row = await requestDatabase(context).prepare(
+    'SELECT stripe_customer_id FROM users WHERE id = ? LIMIT 1',
+  ).bind(actor.user.id).first<{ stripe_customer_id: string | null }>()
+  if (!row?.stripe_customer_id) {
+    throw new DomainError(409, 'billing_customer_missing', 'No Stripe billing profile is linked to this account')
+  }
+  const portal = await stripeClient(context.env).createBillingPortalSession({
+    customerId: row.stripe_customer_id,
+    returnUrl: `${applicationOrigin(context)}/app#billing`,
+    environment: context.env.ENV,
+    idempotencyKey: `${idempotencyPrefix}_${actor.user.id}_${Date.now()}`,
+  })
+  return portal.url
+}
+
+app.post('/api/billing/portal', async (context) => {
+  return context.json({ portal_url: await billingPortal(context, 'billing_portal') })
+})
+
+app.post('/api/billing/checkout', async (context) => {
+  const actor = await currentSession(platformContext(context))
+  if (actor.user.role !== 'supplier') throw new AuthorizationError('Supplier access required', 403, 'supplier_required')
+  return context.json({
+    checkout_url: await billingPortal(context, 'billing_change'),
+    managed_by: 'stripe_billing_portal',
+  })
+})
+
+app.post('/api/webhooks/stripe', async (context) => {
+  const rawBody = await context.req.text()
+  const database = requestDatabase(context)
+  const stripe = stripeClient(context.env)
+  const result = await processStripeWebhook(rawBody, {
+    secrets: required(context.env, 'STRIPE_WEBHOOK_SECRET').split(',').map((secret) => secret.trim()).filter(Boolean),
+    signatureHeader: context.req.header('Stripe-Signature') || '',
+    environment: context.env.ENV,
+    store: createD1StripeWebhookStore(database),
+    handle: createD1BillingEventHandler(database, { environment: context.env.ENV, stripe }),
+  })
+  return context.json({ received: true, ...result })
+})
+
+app.notFound((context) => context.json({
+  error: 'Not found',
+  code: 'not_found',
+  request_id: requestId(context),
+}, 404))
+
+async function runAnchoring(environment: Env): Promise<void> {
+  if (!environment.POLYGON_RPC_URL || !environment.POLYGON_PRIVATE_KEY) return
+  const contractAddress = environment.ENV === 'prod'
+    ? environment.POLYGON_CONTRACT_ADDRESS_PROD
+    : environment.POLYGON_CONTRACT_ADDRESS_DEV
+  if (!contractAddress) return
+  const provider = new JsonRpcProvider(
+    environment.POLYGON_RPC_URL,
+    Number(environment.POLYGON_CHAIN_ID),
+    { staticNetwork: true },
+  )
+  const signer = new Wallet(environment.POLYGON_PRIVATE_KEY, provider)
+  const contract = new Contract(contractAddress, [
+    'function anchorBatch(bytes32 batchId, bytes32 merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount) returns (uint256)',
+  ], signer) as unknown as EthersAnchorContractLike
+  const anchorClient = {
+    ...createEthersAnchorClient(contract),
+    async transactionStatus(transactionHash: string) {
+      const receipt = await provider.getTransactionReceipt(transactionHash)
+      if (receipt) {
+        return {
+          state: receipt.status === 1 ? 'confirmed' as const : 'failed' as const,
+          receipt: {
+            status: receipt.status,
+            blockNumber: receipt.blockNumber,
+            blockHash: receipt.blockHash,
+          },
+        }
+      }
+      return {
+        state: await provider.getTransaction(transactionHash) ? 'pending' as const : 'missing' as const,
+      }
+    },
+  }
+  const service = new PolygonAnchorService(
+    databaseFor(environment),
+    anchorClient,
+    {
+      environment: environment.ENV,
+      chainId: environment.POLYGON_CHAIN_ID,
+      network: environment.ENV === 'prod' ? 'polygon' : 'polygon-amoy',
+      contractAddress,
+      batchSize: 500,
+      confirmations: Number(environment.POLYGON_CONFIRMATIONS || 3),
+    },
+  )
+  await service.runScheduled()
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled(_controller: ScheduledController, environment: Env, execution: ExecutionContext) {
+    execution.waitUntil(runAnchoring(environment))
+  },
+}

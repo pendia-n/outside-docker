@@ -63,6 +63,7 @@ contract ODAnchor {
     }
 
     function verify(uint256 anchorId, bytes32 merkleRoot, bytes32 manifestHash) external view returns (bool) {
+        if (anchorId == 0 || anchorId > nextAnchorId) return false;
         Anchor memory a = anchors[anchorId];
         return a.merkleRoot == merkleRoot && a.manifestHash == manifestHash;
     }

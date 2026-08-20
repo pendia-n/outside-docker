@@ -7,9 +7,28 @@
   "observability": { "enabled": true },
   "vars": {
     "ENV": "dev",
+    "RECEIPT_KEY_ID": "od-receipt-dev-2026-01",
     "POLYGON_CHAIN_ID": "80002",
+    "POLYGON_CONFIRMATIONS": "3",
     "POLYGON_CONTRACT_ADDRESS_DEV": "0x040A0b2189315F7EE13250503eF88ffA55Ab751C",
     "POLYGON_CONTRACT_ADDRESS_PROD": ""
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CHAIN_COORDINATOR",
+        "class_name": "ChainCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ChainCoordinator"]
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
   },
   "d1_databases": [
     {
