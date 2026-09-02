@@ -1,14 +1,16 @@
 # Generate unique values; never reuse these placeholders outside local development.
 JWT_SECRET=base64url-at-least-32-random-bytes
 CSRF_SECRET=different-base64url-at-least-32-random-bytes
-TOTP_ENCRYPTION_KEY=base64url-exactly-32-random-bytes
-TOTP_KEY_ID=od-totp-dev-v1
-TOTP_RECOVERY_PEPPER=base64url-at-least-32-random-bytes
-TOTP_RECOVERY_KEY_ID=od-recovery-dev-v1
 RECEIPT_KEY_ID=od-receipt-dev-v1
 RECEIPT_PRIVATE_KEY_JWK='{"kty":"OKP","crv":"Ed25519","d":"...","x":"..."}'
 RECEIPT_PUBLIC_KEY_JWK='{"kty":"OKP","crv":"Ed25519","x":"..."}'
 APP_ORIGIN=http://localhost:5173
+
+# Optional only if authenticator-app login is enabled.
+# TOTP_ENCRYPTION_KEY=base64url-exactly-32-random-bytes
+# TOTP_KEY_ID=od-totp-dev-v1
+# TOTP_RECOVERY_PEPPER=base64url-at-least-32-random-bytes
+# TOTP_RECOVERY_KEY_ID=od-recovery-dev-v1
 
 # Production-only Stripe and Polygon secrets belong in Wrangler secrets, not here.
 # STRIPE_API_KEY=rk_test_...

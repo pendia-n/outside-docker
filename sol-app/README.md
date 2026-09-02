@@ -39,16 +39,17 @@ pnpm run build
 
 ## Configuration
 
-Copy `.dev.vars.example` and provide independent secrets. Do not reuse the session secret for receipts, CSRF, TOTP, recovery codes, or Stripe.
+Copy `.dev.vars.example` and provide independent secrets. Do not reuse the session secret for receipts, Polygon anchoring, or Stripe.
 
 Required production settings include:
 
 - `JWT_SECRET` and `CSRF_SECRET` (at least 32 bytes each)
-- `TOTP_ENCRYPTION_KEY`, `TOTP_KEY_ID`, `TOTP_RECOVERY_PEPPER`, and `TOTP_RECOVERY_KEY_ID`
 - matching `RECEIPT_PRIVATE_KEY_JWK` / `RECEIPT_PUBLIC_KEY_JWK` Ed25519 keys plus `RECEIPT_KEY_ID`
 - restricted `STRIPE_API_KEY`, webhook secret, and configured supplier/read-pass Price IDs
 - `APP_ORIGIN` using HTTPS
 - Polygon RPC URL, signer key, chain ID, contract address, and confirmations
+
+Optional TOTP setup uses `TOTP_ENCRYPTION_KEY`, `TOTP_KEY_ID`, `TOTP_RECOVERY_PEPPER`, and `TOTP_RECOVERY_KEY_ID`. These are needed only if the authenticator-app flow is enabled and a user starts TOTP enrollment.
 
 The app proves the configured receipt key pair matches before registering or signing with it. Public proof verification resolves keys from the trusted D1 registry; an artifact cannot nominate its own trusted key.
 
