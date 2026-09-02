@@ -1,8 +1,8 @@
 {
-  "address": "0x040A0b2189315F7EE13250503eF88ffA55Ab751C",
+  "address": "0xD44DF2AdB26f48838434c7D7aA57c4A1B9C4211D",
   "deployer": "0xb697505567346623080e06f2adB41B24C8401488",
   "chainId": 80002,
-  "deploymentTx": "0x35b695fb3d647c15fec553ab033edc39f7efa70247d666d233c08b264f5fdec0",
+  "deploymentTx": "0x3e5cc089b78006102b8f0fab39d9b210f7bdf6346cfab051f98de6501919d353",
   "abi": [
     {
       "inputs": [
