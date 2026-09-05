@@ -132,7 +132,7 @@ The manifest distinguishes:
 - OD chain position; and
 - independent anchor time.
 
-The salt and manifest must be retained inside the encrypted evidence package. `C` cannot be reversed into either one.
+The client encrypts the manifest and salt as a small **disclosure capsule** separate from the original. D1 may store that capsule ciphertext and recipient key envelopes even in Commitment Only mode; this does not store the Supplier's original text or file. The capsule lets an authorised Verifier recover the committed H and metadata, then compare them with an original supplied separately. `C` cannot be reversed into the manifest, salt, H, or original.
 
 ### 3.8 Event proof
 
@@ -152,8 +152,8 @@ Outdock offers two explicit evidence modes. **Commitment Only is the default.** 
 
 ### 4.1 Commitment Only — default
 
-- Outdock stores H, the canonical manifest needed to recompute C, the random salt, receipt, event-chain proof, Merkle path, and anchor reference.
-- Outdock stores no Supplier text value, original file, encrypted original, preview, or derivative.
+- Outdock stores C, receipt, event-chain proof, Merkle path, anchor reference, and the encrypted disclosure capsule containing H, canonical manifest, and random salt.
+- Outdock stores no Supplier text value, original file, encrypted original, preview, or derivative in this mode.
 - The Supplier retains the exact original and supplies it to the Verifier through an agreed external channel.
 - The Verifier loads that original into the web UI; hashing and comparison happen locally in the browser.
 - The UI must say plainly that C cannot be reversed into H or into the original and that Outdock cannot recover lost evidence.
@@ -301,7 +301,7 @@ Keep relational identity, policy, state, and proof indexes in D1:
 - procedure step definitions and transition rules;
 - procedure instances and derived status;
 - immutable event occurrences and corrections;
-- evidence-object metadata and R2 references;
+- non-sensitive evidence indexes, optional R2 references, encrypted disclosure capsules, and capsule key envelopes;
 - public encryption keys and wrapped key envelopes;
 - scopes, immutable scope versions, members, invitations, grants, and entitlements;
 - receipts and signing-key registry;
@@ -342,7 +342,6 @@ Existing `cases`, `sources`, `events`, `evidence_scopes`, `evidence_scope_member
 Store binary material only when the Supplier elects paid storage, and store it encrypted:
 
 - encrypted original evidence;
-- encrypted manifest and disclosure payload;
 - optional encrypted previews/derivatives;
 - no verifier export bundles.
 
