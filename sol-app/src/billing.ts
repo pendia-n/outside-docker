@@ -50,6 +50,22 @@ export interface VerifierCheckoutInput {
   environment: RuntimeEnvironment
 }
 
+export interface AccessCheckoutInput {
+  orderId: string
+  accessModel: 'one_time_range' | 'subscription_28d'
+  fullPriceUnits: number
+  discountedUnits: number
+  fullPriceId?: string
+  discountedPriceId?: string
+  subscriptionPriceId?: string
+  username: string
+  customerEmail?: string | null
+  successUrl: string
+  cancelUrl: string
+  idempotencyKey: string
+  environment: RuntimeEnvironment
+}
+
 export interface StripeCheckoutSession {
   id: string
   object: 'checkout.session'
@@ -356,6 +372,49 @@ export class StripeRestClient {
     parameters.set('integration_identifier', createIntegrationIdentifier('readpass'))
     appendMetadata(parameters, 'metadata', metadata)
     appendMetadata(parameters, 'payment_intent_data[metadata]', metadata)
+    return parseStripeSession(await this.postForm('/v1/checkout/sessions', parameters, input.idempotencyKey))
+  }
+
+  async createAccessCheckout(input: AccessCheckoutInput): Promise<StripeCheckoutSession> {
+    const parameters = baseCheckoutParameters({
+      pendingRegistrationId: input.orderId,
+      username: input.username,
+      customerEmail: input.customerEmail,
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+      environment: input.environment,
+    })
+    const metadata = {
+      billing_kind: 'outdock_access',
+      environment: input.environment,
+      access_order_id: requireString(input.orderId, 'access order ID', { max: 128 }),
+      access_model: input.accessModel,
+      username: validateUsername(input.username),
+    }
+    if (input.accessModel === 'subscription_28d') {
+      parameters.set('mode', 'subscription')
+      parameters.set('line_items[0][price]', assertStripeId(input.subscriptionPriceId as string, 'price', 'subscription price ID'))
+      parameters.set('line_items[0][quantity]', '1')
+      appendMetadata(parameters, 'subscription_data[metadata]', metadata)
+    } else {
+      if (!Number.isSafeInteger(input.fullPriceUnits) || input.fullPriceUnits < 0 || !Number.isSafeInteger(input.discountedUnits) || input.discountedUnits < 0 || input.fullPriceUnits + input.discountedUnits < 1) {
+        throw new StripeApiError('Access quantities are invalid', 400, 'invalid_access_quantity')
+      }
+      parameters.set('mode', 'payment')
+      let line = 0
+      if (input.fullPriceUnits > 0) {
+        parameters.set(`line_items[${line}][price]`, assertStripeId(input.fullPriceId as string, 'price', 'seven-day price ID'))
+        parameters.set(`line_items[${line}][quantity]`, String(input.fullPriceUnits))
+        line += 1
+      }
+      if (input.discountedUnits > 0) {
+        parameters.set(`line_items[${line}][price]`, assertStripeId(input.discountedPriceId as string, 'price', 'discounted seven-day price ID'))
+        parameters.set(`line_items[${line}][quantity]`, String(input.discountedUnits))
+      }
+      appendMetadata(parameters, 'payment_intent_data[metadata]', metadata)
+    }
+    parameters.set('integration_identifier', createIntegrationIdentifier('readpass'))
+    appendMetadata(parameters, 'metadata', metadata)
     return parseStripeSession(await this.postForm('/v1/checkout/sessions', parameters, input.idempotencyKey))
   }
 

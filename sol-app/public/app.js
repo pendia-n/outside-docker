@@ -63,7 +63,16 @@
   }
 
   function setBusy(form, busy) {
-    for (const control of $$('button,input,select,textarea', form)) control.disabled = busy
+    form.setAttribute('aria-busy', String(busy))
+    for (const control of $$('button', form)) {
+      if (busy) {
+        control.dataset.wasDisabled = String(control.disabled)
+        control.disabled = true
+      } else {
+        control.disabled = control.dataset.wasDisabled === 'true'
+        delete control.dataset.wasDisabled
+      }
+    }
     const button = $('button[type=submit],button:not([type])', form)
     if (button) {
       if (busy) {
@@ -441,14 +450,14 @@
     const recordSalt = randomHex(32)
     const commitment = await contentCommitment(contentHash, recordSalt)
     const occurredAt = form.elements.occurred_at.value ? new Date(form.elements.occurred_at.value).toISOString() : new Date().toISOString()
-    const manifest = { version: '1', case_id: appState.selectedCase.id, event_type: form.elements.event_type.value.trim(), occurred_at: occurredAt, content_kind: file ? 'file' : 'string', content_length: contentBytes.byteLength, commitment }
+    const manifest = { version: '1', case_id: appState.selectedCase.id, event_type_ref: form.elements.event_type_ref.value, event_type: form.elements.event_type.value.trim(), occurred_at: occurredAt, content_kind: file ? 'file' : 'string', content_length: contentBytes.byteLength, commitment }
     const manifestHash = await sha256(canonical(manifest))
     const idempotencyKey = `h-${crypto.randomUUID()}`
     const correctionId = form.elements.corrects_event_id.value.trim()
     const endpoint = correctionId
       ? `/api/h/cases/${encodeURIComponent(appState.selectedCase.case_ref)}/events/${encodeURIComponent(correctionId)}/corrections`
       : `/api/h/cases/${encodeURIComponent(appState.selectedCase.case_ref)}/events`
-    const result = await api(endpoint, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ event_type: manifest.event_type, occurred_at: occurredAt, commitment, manifest_hash: manifestHash }) })
+    const result = await api(endpoint, { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ event_type_ref: manifest.event_type_ref, event_type: manifest.event_type, occurred_at: occurredAt, commitment, manifest_hash: manifestHash }) })
     const capsule = await encryptCapsule({ content_hash: contentHash, record_salt: recordSalt, content_kind: manifest.content_kind, content_name: file?.name || null, content_type: file?.type || 'text/plain', structured_text: file ? null : structuredText }, form.elements.passcode.value, result.event_id)
     const signedReceipt = result.signed_receipt || {
       receipt: result.receipt,
@@ -533,14 +542,24 @@
   }
 
   async function loadVerifier() {
-    const result = await api('/api/verifier/scopes')
-    appState.scopes = Array.isArray(result?.scopes) ? result.scopes : []
-    $('#verifier-scope-list').innerHTML = appState.scopes.length ? appState.scopes.map((scope) => `<button class="record-card" data-verifier-scope="${escapeHtml(scope.id)}"><strong>${escapeHtml(scope.title)}</strong><span>${escapeHtml(scope.scope_type)} · access until ${formatTime(scope.valid_until)}</span></button>`).join('') : '<div class="empty-state">No active paid scopes.</div>'
-    $$('[data-verifier-scope]').forEach((button) => button.addEventListener('click', async () => {
-      const detail = await api(`/api/verifier/scopes/${encodeURIComponent(button.dataset.verifierScope)}`)
-      const scope = detail?.scope || detail
-      $('#verifier-scope-title').textContent = scope?.title || 'Evidence scope'
-      $('#verifier-scope-detail').innerHTML = renderTimeline(detail?.events)
+    const [offerResult, grantResult] = await Promise.all([api('/api/verifier/offers'), api('/api/verifier/grants')])
+    const offers = Array.isArray(offerResult?.offers) ? offerResult.offers : []
+    const grants = Array.isArray(grantResult?.grants) ? grantResult.grants : []
+    $('#verifier-offer-list').innerHTML = offers.length ? offers.map((offer) => `<button class="record-card" data-access-offer="${escapeHtml(offer.id)}" data-access-model="${escapeHtml(offer.access_model)}"><strong>${escapeHtml(offer.event_type_name)}</strong><span>${escapeHtml(offer.supplier_username)} · ${offer.access_model === 'subscription_28d' ? '$88 subscription' : 'choose historical range'}</span></button>`).join('') : '<div class="empty-state">Accept a Supplier invitation to see event offers.</div>'
+    $$('[data-access-offer]').forEach((button) => button.addEventListener('click', () => {
+      const form = $('#verifier-purchase-form')
+      form.hidden = false
+      form.elements.offer_id.value = button.dataset.accessOffer
+      form.elements.access_model.value = button.dataset.accessModel
+      $('#verifier-range-fields').hidden = button.dataset.accessModel === 'subscription_28d'
+      $('#verifier-purchase-title').textContent = button.querySelector('strong')?.textContent || 'Event access'
+      $('#verifier-quote-result').hidden = true
+      $('#verifier-checkout').disabled = true
+    }))
+    $('#verifier-grant-list').innerHTML = grants.length ? grants.map((grant) => `<button class="record-card" data-access-grant="${escapeHtml(grant.id)}" ${grant.status !== 'active' ? 'disabled' : ''}><strong>${escapeHtml(grant.event_type_name)}</strong><span>${escapeHtml(grant.supplier_username)} · ${escapeHtml(grant.status)} · ${formatTime(grant.data_from)} to ${formatTime(grant.data_until)}</span></button>`).join('') : '<div class="empty-state">No purchased access yet.</div>'
+    $$('[data-access-grant]').forEach((button) => button.addEventListener('click', async () => {
+      const detail = await api(`/api/verifier/grants/${encodeURIComponent(button.dataset.accessGrant)}/events`)
+      $('#verifier-grant-detail').innerHTML = renderTimeline(detail?.events)
     }))
   }
 
@@ -549,6 +568,14 @@
     const writableScopes = Array.isArray(result?.available_scopes) ? result.available_scopes : []
     $('#share-scope-select').innerHTML = writableScopes.map((scope) => `<option value="${escapeHtml(scope.id)}">${escapeHtml(scope.title)}</option>`).join('')
     $('#share-list').innerHTML = renderRecords(result?.shares, (share) => `<strong>${escapeHtml(share.scope_title || share.scope_id)}</strong><span>${share.revoked_at ? 'revoked' : `expires ${formatTime(share.expires_at)}`}</span>`)
+  }
+
+  async function loadEventCatalog() {
+    const result = await api('/api/event-types')
+    const types = Array.isArray(result?.event_types) ? result.event_types : []
+    $('#event-type-list').innerHTML = renderRecords(types, (type) => `<strong>${escapeHtml(type.name)}</strong><span>${escapeHtml(type.event_type_ref)} · ${type.instance_count ?? 0} instances · ${type.record_count ?? 0} records</span>`)
+    $('#invitation-event-type').innerHTML = types.filter((type) => type.status === 'active').map((type) => `<option value="${escapeHtml(type.event_type_ref)}">${escapeHtml(type.name)}</option>`).join('')
+    $$('.event-type-select').forEach((select) => { select.innerHTML = types.filter((type) => type.status === 'active').map((type) => `<option value="${escapeHtml(type.event_type_ref)}">${escapeHtml(type.name)}</option>`).join('') })
   }
 
   async function verifySignedReceipt(signedReceipt, expectedEnvironment) {
@@ -823,42 +850,83 @@
     $('#logout')?.addEventListener('click', async () => { await api('/api/logout', { method: 'POST' }); location.replace('/') })
 
     $('#case-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { await api('/api/h/cases', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); event.currentTarget.reset(); event.currentTarget.hidden = true; await Promise.all([loadCases(), loadDashboard()]); notice('Case created.') } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { await api('/api/h/cases', { method: 'POST', body: JSON.stringify(formObject(form)) }); form.reset(); form.hidden = true; await Promise.all([loadCases(), loadDashboard()]); notice('Case created.') } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
     })
     $('#event-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { await submitHumanEvent(event.currentTarget) } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { await submitHumanEvent(form) } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
+    })
+    $('#invitation-accept-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try {
+        await api('/api/verifier/invitations/accept', { method: 'POST', body: JSON.stringify(formObject(form)) })
+        form.reset(); await loadVerifier(); notice('Supplier invitation accepted.')
+      } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
+    })
+    $('#verifier-quote')?.addEventListener('click', async () => {
+      const form = $('#verifier-purchase-form')
+      try {
+        const input = formObject(form)
+        if (input.range_start) input.range_start = new Date(input.range_start).toISOString()
+        if (input.range_end) input.range_end = new Date(input.range_end).toISOString()
+        const quote = await api(`/api/verifier/offers/${encodeURIComponent(input.offer_id)}/quote`, { method: 'POST', body: JSON.stringify(input) })
+        $('#verifier-quote-result').hidden = false
+        $('#verifier-quote-result').textContent = `$${(quote.amountCents / 100).toFixed(2)} USD · ${quote.sevenDayUnits ? `${quote.sevenDayUnits} seven-day unit(s)` : '30-day lookback + 28 live days'}`
+        $('#verifier-checkout').disabled = false
+      } catch (error) { notice(error.message, 'error'); $('#verifier-checkout').disabled = true }
+    })
+    $('#verifier-purchase-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try {
+        const input = formObject(form)
+        if (input.range_start) input.range_start = new Date(input.range_start).toISOString()
+        if (input.range_end) input.range_end = new Date(input.range_end).toISOString()
+        const result = await api(`/api/verifier/offers/${encodeURIComponent(input.offer_id)}/checkout`, { method: 'POST', body: JSON.stringify(input) })
+        location.assign(result.checkout_url)
+      } catch (error) { notice(error.message, 'error'); setBusy(form, false) }
     })
     $('#api-key-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { const result = await api('/api/api-keys', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#api-key-result').hidden = false; $('#api-key-result').textContent = `Copy now — this key is shown once: ${result.api_key}`; event.currentTarget.reset(); event.currentTarget.hidden = true; await loadMachine() } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { const result = await api('/api/api-keys', { method: 'POST', body: JSON.stringify(formObject(form)) }); $('#api-key-result').hidden = false; $('#api-key-result').textContent = `Copy now — this key is shown once: ${result.api_key}`; form.reset(); form.hidden = true; await loadMachine() } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
     })
     $('#source-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
+      event.preventDefault(); const form = event.target; setBusy(form, true)
       try {
-        const idempotencyKey = event.currentTarget.dataset.idempotencyKey || `source-${crypto.randomUUID()}`
-        event.currentTarget.dataset.idempotencyKey = idempotencyKey
+        const idempotencyKey = form.dataset.idempotencyKey || `source-${crypto.randomUUID()}`
+        form.dataset.idempotencyKey = idempotencyKey
         await api('/api/v1/sources', {
           method: 'POST',
           headers: { 'Idempotency-Key': idempotencyKey },
-          body: JSON.stringify(formObject(event.currentTarget)),
+          body: JSON.stringify(formObject(form)),
         })
-        delete event.currentTarget.dataset.idempotencyKey
-        event.currentTarget.reset(); event.currentTarget.hidden = true; await loadMachine(); notice('Machine source registered.')
-      } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+        delete form.dataset.idempotencyKey
+        form.reset(); form.hidden = true; await loadMachine(); notice('Machine source registered.')
+      } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
     })
     $('#share-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { const result = await api('/api/shares', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#share-result').hidden = false; $('#share-result').textContent = result.share_url; event.currentTarget.hidden = true; await loadShares() } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { const result = await api('/api/shares', { method: 'POST', body: JSON.stringify(formObject(form)) }); $('#share-result').hidden = false; $('#share-result').textContent = result.share_url; form.hidden = true; await loadShares() } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
+    })
+    $('#event-type-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { await api('/api/event-types', { method: 'POST', body: JSON.stringify(formObject(form)) }); form.reset(); form.hidden = true; await loadEventCatalog(); notice('Event type created.') } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
+    })
+    $('#supplier-invitation-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try {
+        const result = await api('/api/supplier/invitations', { method: 'POST', body: JSON.stringify(formObject(form)) })
+        $('#supplier-invitation-result').hidden = false
+        $('#supplier-invitation-result').textContent = `Copy once and send privately: ${result.invitation_token}`
+      } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
     })
     $('#workspace-verify-form')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { await handleVerifyForm(event.currentTarget, $('#workspace-verify-result')) } catch (error) { $('#workspace-verify-result').innerHTML = `<div class="verification-status fail"><strong>VERIFICATION FAILED</strong><p>${escapeHtml(error.message)}</p></div>` } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { await handleVerifyForm(form, $('#workspace-verify-result')) } catch (error) { $('#workspace-verify-result').innerHTML = `<div class="verification-status fail"><strong>VERIFICATION FAILED</strong><p>${escapeHtml(error.message)}</p></div>` } finally { setBusy(form, false) }
     })
     $('#billing-checkout')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { const result = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); location.assign(result.checkout_url) } catch (error) { notice(error.message, 'error'); setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { const result = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify(formObject(form)) }); location.assign(result.checkout_url) } catch (error) { notice(error.message, 'error'); setBusy(form, false) }
     })
     $('#billing-portal')?.addEventListener('click', async () => {
       try { const result = await api('/api/billing/portal', { method: 'POST' }); location.assign(result.portal_url) } catch (error) { notice(error.message, 'error') }
@@ -876,8 +944,8 @@
       } catch (error) { notice(error.message, 'error') }
     })
     $('#totp-confirm')?.addEventListener('submit', async (event) => {
-      event.preventDefault(); setBusy(event.currentTarget, true)
-      try { const result = await api('/api/security/totp/confirm', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#recovery-codes').textContent = `Store once: ${result.recovery_codes.join('  ')}`; notice('TOTP enabled.') } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
+      event.preventDefault(); const form = event.target; setBusy(form, true)
+      try { const result = await api('/api/security/totp/confirm', { method: 'POST', body: JSON.stringify(formObject(form)) }); $('#recovery-codes').textContent = `Store once: ${result.recovery_codes.join('  ')}`; notice('TOTP enabled.') } catch (error) { notice(error.message, 'error') } finally { setBusy(form, false) }
     })
     $('#revoke-sessions')?.addEventListener('click', async () => {
       try { await api('/api/security/sessions/revoke', { method: 'POST' }); notice('Other sessions revoked. Sign in again on those devices.') } catch (error) { notice(error.message, 'error') }
@@ -887,7 +955,7 @@
     if (user.role === 'supplier' && (user.supplier_mode === 'both' || user.supplier_mode === 'H')) loaders.push(loadCases())
     if (user.role === 'supplier' && (user.supplier_mode === 'both' || user.supplier_mode === 'M')) loaders.push(loadMachine())
     if (user.role === 'verifier') loaders.push(loadVerifier())
-    if (user.role === 'supplier') loaders.push(loadShares())
+    if (user.role === 'supplier') loaders.push(loadShares(), loadEventCatalog())
     const results = await Promise.allSettled(loaders)
     const failure = results.find((result) => result.status === 'rejected')
     if (failure) notice(failure.reason?.message || 'Some workspace data could not be loaded.', 'error')

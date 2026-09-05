@@ -171,18 +171,19 @@ export class PolygonAnchorService {
 
   async preparePriorityBatch(): Promise<AnchorBatchRow | null> {
     const request = await this.database.prepare(`
-      SELECT id, supplier_user_id, event_type_ref, range_start, range_end
+      SELECT id, supplier_user_id, event_type_id, event_type_ref, range_start, range_end
       FROM priority_anchor_requests
       WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1
-    `).first<{ id: string; supplier_user_id: string; event_type_ref: string; range_start: string; range_end: string }>()
+    `).first<{ id: string; supplier_user_id: string; event_type_id: string | null; event_type_ref: string; range_start: string; range_end: string }>()
     if (!request) return null
     const pending = await this.database.prepare(`
       SELECT id, proof, received_at FROM events
-      WHERE owner_id = ? AND event_type = ?
+      WHERE owner_id = ? AND ((? IS NOT NULL AND event_type_id = ?) OR (? IS NULL AND event_type = ?))
         AND COALESCE(occurred_at, received_at) >= ? AND COALESCE(occurred_at, received_at) < ?
         AND anchor_status = 'pending_anchor' AND anchor_batch_id IS NULL
       ORDER BY received_at ASC, id ASC LIMIT ?
-    `).bind(request.supplier_user_id, request.event_type_ref.toUpperCase(), request.range_start, request.range_end, this.batchSize).all<PendingAnchorEvent>()
+    `).bind(request.supplier_user_id, request.event_type_id, request.event_type_id, request.event_type_id,
+      request.event_type_ref.toUpperCase(), request.range_start, request.range_end, this.batchSize).all<PendingAnchorEvent>()
     if (pending.results.length === 0) {
       const completedAt = this.now().toISOString()
       await this.database.prepare(`
@@ -364,6 +365,10 @@ export class PolygonAnchorService {
         UPDATE receipts SET anchor_status = 'anchor_failed', updated_at = ?
         WHERE event_id IN (SELECT event_id FROM anchor_batch_events WHERE batch_id = ?)
       `).bind(now.toISOString(), batch.id))
+      statements.push(this.database.prepare(`
+        UPDATE priority_anchor_requests SET status = 'failed', last_error = ?, updated_at = ?
+        WHERE anchor_batch_id = ? AND status = 'batching'
+      `).bind(message, now.toISOString(), batch.id))
     }
     await this.database.batch(statements)
   }

@@ -33,6 +33,8 @@ export interface CreateCaseInput {
 
 export interface HumanEventInput {
   event_type: string
+  event_type_ref?: string | null
+  event_instance_ref?: string | null
   commitment: string
   manifest_hash: string
   occurred_at?: string | null
@@ -186,6 +188,22 @@ export class TrackHService {
     if (humanCase.status !== 'open') throw new DomainError(409, 'case_closed', 'Events cannot be appended to a closed case')
     if (!rawInput.idempotency_key) throw new DomainError(400, 'idempotency_required', 'Idempotency-Key is required')
     const requestHash = await canonicalSha256({ ...rawInput, case_ref: caseRef, correction_target: correctionTarget ?? null })
+    let eventTypeId: string | null = null
+    let eventInstanceId: string | null = null
+    if (rawInput.event_type_ref) {
+      const catalog = await this.database.prepare(`SELECT id FROM supplier_event_types WHERE owner_id = ? AND event_type_ref = ? AND status = 'active' LIMIT 1`)
+        .bind(actor.userId, rawInput.event_type_ref).first<{ id: string }>()
+      if (!catalog) throw new DomainError(404, 'event_type_not_found', 'Active event type not found')
+      eventTypeId = catalog.id
+      if (rawInput.event_instance_ref) {
+        const instance = await this.database.prepare(`SELECT id FROM event_instances WHERE owner_id = ? AND event_type_id = ? AND instance_ref = ? AND status = 'active' LIMIT 1`)
+          .bind(actor.userId, eventTypeId, rawInput.event_instance_ref).first<{ id: string }>()
+        if (!instance) throw new DomainError(404, 'event_instance_not_found', 'Active event instance not found')
+        eventInstanceId = instance.id
+      }
+    } else if (rawInput.event_instance_ref) {
+      throw new DomainError(400, 'event_type_required', 'event_type_ref is required with event_instance_ref')
+    }
     return this.chainAppender.append({
       ownerId: actor.userId,
       track: 'H',
@@ -195,6 +213,8 @@ export class TrackHService {
       manifestHash: rawInput.manifest_hash,
       occurredAt: rawInput.occurred_at,
       caseId: humanCase.id,
+      eventTypeId,
+      eventInstanceId,
       correctsEventId: correctionTarget ?? null,
       metadata: rawInput.metadata,
       credentialType: 'session',

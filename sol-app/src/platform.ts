@@ -187,7 +187,10 @@ export function requireVerifierScope(actor: SessionActor, scopeId: string): void
 }
 
 export function allowedOrigins(context: AppContext): string[] {
-  return [context.env.APP_ORIGIN || new URL(context.req.url).origin]
+  const configured = context.env.APP_ORIGIN || new URL(context.req.url).origin
+  if (context.env.ENV !== 'dev') return [configured]
+  const requestOrigin = new URL(context.req.url).origin
+  return requestOrigin === configured ? [configured] : [configured, requestOrigin]
 }
 
 export function assertPublicMutationOrigin(context: AppContext): void {

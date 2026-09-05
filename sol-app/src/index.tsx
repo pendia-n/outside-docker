@@ -10,7 +10,10 @@ import {
   createD1BillingEventHandler,
   createD1StripeWebhookStore,
   processStripeWebhook,
+  type StripeEvent,
 } from './billing'
+import { quoteSubscriptionWindow } from './access'
+import { createAccessRoutes } from './access-routes'
 import { DomainError, createChainDurableObject, durableObjectChainAppender } from './chain-do'
 import { createEventCatalogRoutes } from './event-catalog'
 import { databaseFor } from './db'
@@ -196,6 +199,32 @@ app.route('/api', createEventCatalogRoutes({
       throw new AuthorizationError('An active Supplier plan is required', 402, 'active_plan_required')
     }
   },
+}))
+
+app.route('/api', createAccessRoutes({
+  database: (context) => requestDatabase(context),
+  authenticate: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? {
+      userId: actor.user.id,
+      username: actor.user.username,
+      email: null,
+      role: actor.user.role,
+      sessionId: actor.sessionId,
+    } : null
+  },
+  authorizeMutation: async (_actor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+  },
+  stripe: (context) => stripeClient(context.env),
+  origin: applicationOrigin,
+  environment: (context) => context.env.ENV,
+  priceIds: (context) => ({
+    full: required(context.env, 'STRIPE_PRICE_VERIFIER_7D'),
+    discounted: required(context.env, 'STRIPE_PRICE_VERIFIER_7D_DISCOUNTED'),
+    subscription: required(context.env, 'STRIPE_PRICE_VERIFIER_SUBSCRIPTION_28D'),
+  }),
 }))
 
 const chainAppender = (context: WorkerContext) => durableObjectChainAppender(context.env.CHAIN_COORDINATOR)
@@ -573,18 +602,21 @@ app.post('/api/anchors/priority', async (context) => {
     throw new AuthorizationError('An active Supplier plan is required', 402, 'active_plan_required')
   }
   const body = requirePlainRecord(await context.req.json(), 'priority anchor request')
-  const eventType = requireString(body.event_type, 'event_type', { max: 96 }).toUpperCase()
-  if (!/^[A-Z0-9][A-Z0-9_.:-]{0,95}$/.test(eventType)) throw new ValidationError('event_type is invalid', 'invalid_event_type', 'event_type')
+  const eventTypeRef = requireString(body.event_type_ref ?? body.event_type, 'event_type_ref', { max: 128 })
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(eventTypeRef)) throw new ValidationError('event_type_ref is invalid', 'invalid_event_type_ref', 'event_type_ref')
   const start = new Date(requireString(body.range_start, 'range_start', { max: 64 }))
   const end = new Date(requireString(body.range_end, 'range_end', { max: 64 }))
   if (!Number.isFinite(start.valueOf()) || !Number.isFinite(end.valueOf()) || start >= end) {
     throw new ValidationError('range_start and range_end must be a valid end-exclusive range', 'invalid_access_range')
   }
   const database = requestDatabase(context)
+  const catalog = await database.prepare(`SELECT id FROM supplier_event_types WHERE owner_id = ? AND event_type_ref = ? AND status = 'active' LIMIT 1`)
+    .bind(actor.user.id, eventTypeRef).first<{ id: string }>()
+  if (!catalog) throw new DomainError(404, 'event_type_not_found', 'Active event type not found')
   const event = await database.prepare(`
-    SELECT 1 FROM events WHERE owner_id = ? AND event_type = ?
+    SELECT 1 FROM events WHERE owner_id = ? AND event_type_id = ?
       AND COALESCE(occurred_at, received_at) >= ? AND COALESCE(occurred_at, received_at) < ? LIMIT 1
-  `).bind(actor.user.id, eventType, start.toISOString(), end.toISOString()).first()
+  `).bind(actor.user.id, catalog.id, start.toISOString(), end.toISOString()).first()
   if (!event) throw new DomainError(404, 'event_range_empty', 'No matching Supplier events exist in this range')
   const id = crypto.randomUUID()
   const createdAt = new Date().toISOString()
@@ -592,21 +624,93 @@ app.post('/api/anchors/priority', async (context) => {
     INSERT INTO priority_anchor_requests (
       id, requested_by_user_id, supplier_user_id, event_type_id, event_type_ref,
       access_order_id, range_start, range_end, status, created_at, updated_at
-    ) VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'pending', ?, ?)
-  `).bind(id, actor.user.id, actor.user.id, eventType, start.toISOString(), end.toISOString(), createdAt, createdAt).run()
-  return context.json({ id, event_type: eventType, range_start: start.toISOString(), range_end: end.toISOString(), status: 'pending' }, 202)
+    ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'pending', ?, ?)
+  `).bind(id, actor.user.id, actor.user.id, catalog.id, eventTypeRef, start.toISOString(), end.toISOString(), createdAt, createdAt).run()
+  return context.json({ id, event_type_ref: eventTypeRef, range_start: start.toISOString(), range_end: end.toISOString(), status: 'pending' }, 202)
 })
+
+async function fulfillAccessCheckout(database: D1Database, environment: Env['ENV'], event: StripeEvent): Promise<boolean> {
+  if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) return false
+  const session = event.data.object
+  if (session.object !== 'checkout.session' || session.payment_status !== 'paid') return false
+  const rawMetadata = session.metadata
+  if (!rawMetadata || typeof rawMetadata !== 'object' || Array.isArray(rawMetadata)) return false
+  const metadata = rawMetadata as Record<string, unknown>
+  if (metadata.billing_kind !== 'outdock_access') return false
+  if (metadata.environment !== environment || typeof metadata.access_order_id !== 'string') {
+    throw new StripeWebhookError('Access Checkout metadata is invalid', 'invalid_checkout_metadata')
+  }
+  const order = await database.prepare(`
+    SELECT o.*, f.supplier_user_id, i.verifier_organization_id
+    FROM access_orders o JOIN access_offers f ON f.id = o.offer_id
+    JOIN verifier_invitations i ON i.id = f.invitation_id
+    WHERE o.id = ? AND o.environment = ? LIMIT 1
+  `).bind(metadata.access_order_id, environment).first<Record<string, any>>()
+  if (!order) throw new StripeWebhookError('Access order was not found', 'access_order_not_found')
+  if (order.status === 'fulfilled') return true
+  if (order.status !== 'checkout_created' || order.stripe_checkout_session_id !== session.id || metadata.access_model !== order.access_model) {
+    throw new StripeWebhookError('Access Checkout does not match the order', 'checkout_order_mismatch')
+  }
+  if (session.currency !== 'usd' || session.amount_total !== order.amount_cents) {
+    throw new StripeWebhookError('Access Checkout amount does not match the server quote', 'checkout_amount_mismatch')
+  }
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : null
+  const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null
+  if (order.access_model === 'one_time_range' && !paymentIntentId) throw new StripeWebhookError('PaymentIntent is missing', 'checkout_payment_missing')
+  if (order.access_model === 'subscription_28d' && !subscriptionId) throw new StripeWebhookError('Subscription is missing', 'checkout_subscription_missing')
+
+  const paidAt = new Date(event.created * 1000)
+  const quote = order.access_model === 'subscription_28d' ? quoteSubscriptionWindow(paidAt) : null
+  const dataFrom = quote?.rangeStart ?? order.range_start
+  const dataUntil = quote?.rangeEnd ?? order.range_end
+  const accessFrom = paidAt.toISOString()
+  const accessUntil = order.access_model === 'subscription_28d' ? dataUntil : '9999-12-31T23:59:59.999Z'
+  const futureUntil = order.access_model === 'subscription_28d' ? dataUntil : null
+  const grantId = crypto.randomUUID()
+  const now = new Date().toISOString()
+  await database.batch([
+    database.prepare(`
+      INSERT INTO access_grants (
+        id, access_order_id, verifier_user_id, verifier_organization_id,
+        supplier_user_id, event_type_id, access_model, data_from, data_until,
+        access_from, access_until, include_future_until, status, created_at, updated_at
+      ) SELECT ?, id, verifier_user_id, ?, ?, event_type_id, access_model, ?, ?, ?, ?, ?, 'active', ?, ?
+        FROM access_orders WHERE id = ? AND status = 'checkout_created'
+    `).bind(grantId, order.verifier_organization_id, order.supplier_user_id, dataFrom, dataUntil,
+      accessFrom, accessUntil, futureUntil, now, now, order.id),
+    database.prepare(`
+      UPDATE access_orders SET status = 'fulfilled', range_start = ?, range_end = ?,
+        stripe_payment_intent_id = ?, stripe_subscription_id = ?, completed_at = ?, updated_at = ?
+      WHERE id = ? AND status = 'checkout_created'
+        AND EXISTS (SELECT 1 FROM access_grants WHERE id = ? AND access_order_id = ?)
+    `).bind(dataFrom, dataUntil, paymentIntentId, subscriptionId, now, now, order.id, grantId, order.id),
+    database.prepare(`
+      INSERT INTO priority_anchor_requests (
+        id, requested_by_user_id, supplier_user_id, event_type_id, event_type_ref,
+        access_order_id, range_start, range_end, status, created_at, updated_at
+      ) SELECT ?, verifier_user_id, ?, event_type_id, t.event_type_ref, id, ?, ?, 'pending', ?, ?
+        FROM access_orders JOIN supplier_event_types t ON t.id = access_orders.event_type_id
+        WHERE access_orders.id = ? AND access_orders.status IN ('checkout_created', 'fulfilled')
+    `).bind(crypto.randomUUID(), order.supplier_user_id, dataFrom, dataUntil, now, now, order.id),
+  ])
+  const completed = await database.prepare('SELECT 1 FROM access_orders WHERE id = ? AND status = \'fulfilled\' LIMIT 1').bind(order.id).first()
+  if (!completed) throw new StripeWebhookError('Access fulfillment did not complete atomically', 'access_fulfillment_incomplete')
+  return true
+}
 
 app.post('/api/webhooks/stripe', async (context) => {
   const rawBody = await context.req.text()
   const database = requestDatabase(context)
   const stripe = stripeClient(context.env)
+  const legacyHandler = createD1BillingEventHandler(database, { environment: context.env.ENV, stripe })
   const result = await processStripeWebhook(rawBody, {
     secrets: required(context.env, 'STRIPE_WEBHOOK_SECRET').split(',').map((secret) => secret.trim()).filter(Boolean),
     signatureHeader: context.req.header('Stripe-Signature') || '',
     environment: context.env.ENV,
     store: createD1StripeWebhookStore(database),
-    handle: createD1BillingEventHandler(database, { environment: context.env.ENV, stripe }),
+    handle: async (event) => {
+      if (!await fulfillAccessCheckout(database, context.env.ENV, event)) await legacyHandler(event)
+    },
   })
   return context.json({ received: true, ...result })
 })

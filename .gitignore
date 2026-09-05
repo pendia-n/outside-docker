@@ -5,3 +5,4 @@ graphify-out/
 dist
 node_modules
 .wrangler
+.playwright-cli/

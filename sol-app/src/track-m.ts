@@ -52,6 +52,8 @@ export interface CreateSourceInput {
 
 export interface MachineRecordInput {
   source_id: string
+  event_type_ref?: string | null
+  event_instance_ref?: string | null
   delivery_id?: string | null
   action: string
   occurred_at: string
@@ -199,6 +201,8 @@ export function machineManifest(input: MachineRecordInput, material: MachineEvid
     version: 'OD-MANIFEST-1',
     supplier_username: supplierUsername,
     track: 'M',
+    event_type_ref: input.event_type_ref ?? null,
+    event_instance_ref: input.event_instance_ref ?? null,
     source_id: input.source_id,
     delivery_id: input.delivery_id ?? null,
     action: input.action,
@@ -584,6 +588,22 @@ export class TrackMService {
     if (!identity) throw new DomainError(401, 'invalid_api_key', 'Supplier account is unavailable')
     const manifest = machineManifest(normalizedInput, material, identity.username)
     const manifestHash = await canonicalSha256(manifest)
+    let eventTypeId: string | null = null
+    let eventInstanceId: string | null = null
+    if (input.event_type_ref) {
+      const catalog = await this.database.prepare(`SELECT id FROM supplier_event_types WHERE owner_id = ? AND event_type_ref = ? AND status = 'active' LIMIT 1`)
+        .bind(credential.ownerId, input.event_type_ref).first<{ id: string }>()
+      if (!catalog) throw new DomainError(404, 'event_type_not_found', 'Active event type not found')
+      eventTypeId = catalog.id
+      if (input.event_instance_ref) {
+        const instance = await this.database.prepare(`SELECT id FROM event_instances WHERE owner_id = ? AND event_type_id = ? AND instance_ref = ? AND status = 'active' LIMIT 1`)
+          .bind(credential.ownerId, eventTypeId, input.event_instance_ref).first<{ id: string }>()
+        if (!instance) throw new DomainError(404, 'event_instance_not_found', 'Active event instance not found')
+        eventInstanceId = instance.id
+      }
+    } else if (input.event_instance_ref) {
+      throw new DomainError(400, 'event_type_required', 'event_type_ref is required with event_instance_ref')
+    }
     const result = await this.appender.append({
       ownerId: credential.ownerId,
       track: 'M',
@@ -593,6 +613,8 @@ export class TrackMService {
       manifestHash,
       occurredAt: occurred.toISOString(),
       sourceId: source.id,
+      eventTypeId,
+      eventInstanceId,
       deliveryId: input.delivery_id ?? null,
       sequence: input.sequence ?? null,
       sourceKeyId: input.source_key_id ?? null,
@@ -751,7 +773,7 @@ export function createTrackMRoutes(dependencies: TrackMRoutesDependencies): Hono
     } catch (error) { return routeError(context, error) }
   })
   routes.get('/receipts/:eventId', async (context) => {
-    try { return context.json(await service(context).getReceipt(await credential(context), context.req.param('eventId'))) }
+    try { return context.json(await service(context).getReceipt(await sourceCredential(context, false), context.req.param('eventId'))) }
     catch (error) { return routeError(context, error) }
   })
   routes.get('/records', async (context) => {
@@ -759,15 +781,15 @@ export function createTrackMRoutes(dependencies: TrackMRoutesDependencies): Hono
     catch (error) { return routeError(context, error) }
   })
   routes.get('/sources/:sourceId/chain', async (context) => {
-    try { return context.json({ events: await service(context).sourceChain(await credential(context), context.req.param('sourceId')) }) }
+    try { return context.json({ events: await service(context).sourceChain(await sourceCredential(context, false), context.req.param('sourceId')) }) }
     catch (error) { return routeError(context, error) }
   })
   routes.get('/deliveries/:deliveryId/events', async (context) => {
-    try { return context.json({ events: await service(context).deliveryEvents(await credential(context), context.req.param('deliveryId')) }) }
+    try { return context.json({ events: await service(context).deliveryEvents(await sourceCredential(context, false), context.req.param('deliveryId')) }) }
     catch (error) { return routeError(context, error) }
   })
   routes.get('/usage', async (context) => {
-    try { return context.json(await service(context).usage(await credential(context))) }
+    try { return context.json(await service(context).usage(await sourceCredential(context, false))) }
     catch (error) { return routeError(context, error) }
   })
   return routes

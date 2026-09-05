@@ -38,6 +38,8 @@ export interface ChainAppendInput {
   requestHash: string
   occurredAt?: string | null
   caseId?: string | null
+  eventTypeId?: string | null
+  eventInstanceId?: string | null
   sourceId?: string | null
   deliveryId?: string | null
   sequence?: number | null
@@ -375,10 +377,10 @@ export class D1ChainRepository implements ChainRepository {
     statements.push(this.database.prepare(`
       INSERT INTO events (
         id, chain_id, owner_id, position, commitment, manifest_hash, previous_proof, proof, created_at,
-        track, external_ref, case_id, event_type, action, source_id, delivery_id, occurred_at, received_at,
+        track, external_ref, case_id, event_type_id, event_instance_id, event_type, action, source_id, delivery_id, occurred_at, received_at,
         sequence, idempotency_key, credential_type, credential_id, request_hash, source_key_id,
         source_signature, corrects_event_id, sequence_status, metadata_json, anchor_status, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_anchor', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_anchor', ?)
     `).bind(
       append.eventId,
       chain.id,
@@ -392,6 +394,8 @@ export class D1ChainRepository implements ChainRepository {
       input.track,
       input.externalRef,
       input.caseId ?? null,
+      input.eventTypeId ?? null,
+      input.eventInstanceId ?? null,
       input.eventType,
       input.track === 'M' ? input.eventType : null,
       input.sourceId ?? null,
