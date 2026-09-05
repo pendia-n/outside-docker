@@ -1,8 +1,8 @@
-# Outside Docker Upgrade Plan
+# Outdock Upgrade Plan
 
 ## 1. Status and authority
 
-This document is the proposed upgrade plan for Outside Docker after the September 2026 product review. It supersedes conflicting product assumptions in `SHOULD-BE.md`, `NOW-THAT.md`, `design.md`, and `od.md` for the scope described here. It is a plan, not a claim that these upgrades are implemented.
+This document is the proposed upgrade plan for **Outdock** (renamed from Outside Docker) after the September 2026 product review. It supersedes conflicting product assumptions in `SHOULD-BE.md`, `NOW-THAT.md`, `design.md`, and `od.md` for the scope described here. It is a plan, not a claim that these upgrades are implemented.
 
 Decisions already established:
 
@@ -11,7 +11,11 @@ Decisions already established:
 - A Supplier may operate Track H, Track M, or both under one Supplier identity.
 - OD must not pretend a commitment can be reversed. Verification always recomputes forward from disclosed evidence.
 - Payment alone never grants access to confidential evidence. Supplier authorisation and a valid Verifier entitlement are both required.
-- A published one-time scope is an immutable snapshot. Future events require a new scope or an explicitly live entitlement.
+- A one-time purchase covers a Supplier-authorised event type and selected UTC range. Future events outside that range require a new purchase.
+- A live subscription covers one Supplier-authorised event type, starts with the preceding 30 days, follows new events for a 28-day access term, and renews every 28 days.
+- Verifier evidence is web-only: no download or export control is presented. This reduces casual leakage but cannot technically prevent screenshots, copying, recording, or extraction after browser disclosure.
+- Outdock stores no Supplier original by default. Optional client-encrypted evidence storage includes the first 100 MB and costs USD 10 for each additional started 100 MB, subject to an approved reset/billing period.
+- Base is the recommended first production anchor network; the proof format remains network-agnostic.
 - The four hard-coded Supplier plans are not an approved commercial decision and must not be carried into the upgrade unchanged.
 
 ## 2. Product promise
@@ -144,25 +148,26 @@ The first event has an empty previous proof. Corrections append new events and n
 
 ## 4. Evidence storage and encryption
 
-OD offers two explicit evidence modes.
+Outdock offers two explicit evidence modes. **Commitment Only is the default.** Optional encrypted storage is a paid convenience, not a prerequisite for creating or anchoring evidence.
 
-### 4.1 Sealed Evidence — recommended default
+### 4.1 Commitment Only — default
+
+- Outdock stores H, the canonical manifest needed to recompute C, the random salt, receipt, event-chain proof, Merkle path, and anchor reference.
+- Outdock stores no Supplier text value, original file, encrypted original, preview, or derivative.
+- The Supplier retains the exact original and supplies it to the Verifier through an agreed external channel.
+- The Verifier loads that original into the web UI; hashing and comparison happen locally in the browser.
+- The UI must say plainly that C cannot be reversed into H or into the original and that Outdock cannot recover lost evidence.
+
+### 4.2 Optional encrypted storage
 
 - The Supplier client hashes the exact original before encryption.
 - The client generates a random data-encryption key per evidence object.
-- The original, manifest, H, salt, and disclosure metadata are encrypted client-side with authenticated encryption.
+- The original is encrypted client-side with authenticated encryption; plaintext never reaches the Worker or D1.
 - R2 stores ciphertext only.
 - D1 stores the object reference, integrity metadata, encryption envelope metadata, ownership, grants, receipts, and audit history.
 - The chain stores only aggregate commitments.
 
-This mode enables account-based disclosure without WhatsApp/email passcodes.
-
-### 4.2 Commitment Only
-
-- OD stores the commitment, manifest hash, receipt, chain proof, and anchor material.
-- OD stores no original or encrypted original.
-- The Supplier must retain and later provide the exact original, manifest, and salt.
-- The UI and API must warn that OD cannot recover or disclose lost evidence.
+This mode enables account-based browser disclosure without WhatsApp/email passcodes. The first 100 MB per Supplier organisation is included. Each additional started 100 MB is USD 10; the billing/reset period must be approved before Stripe configuration. Removing a download button is a deterrent, not a guarantee against copying after browser disclosure.
 
 ### 4.3 Key model
 
@@ -171,7 +176,7 @@ This mode enables account-based disclosure without WhatsApp/email passcodes.
 - A Supplier-approved scope key may wrap the DEKs of scope members.
 - The scope key is wrapped separately to each named Verifier’s public encryption key.
 - D1 stores public keys and wrapped key envelopes, never plaintext private keys.
-- A Verifier’s browser or API client decrypts locally.
+- A Verifier’s browser decrypts locally. Verifier CRUD, payment, disclosure, and verification are web-only in this version.
 - Payment changes entitlement state; it never manufactures an encryption grant.
 
 The product must choose and document one recovery posture before implementation:
@@ -191,10 +196,10 @@ UI flow:
 
 1. Choose or start a procedure instance.
 2. Select the next event definition or an allowed exceptional event.
-3. Add structured facts and one or more evidence objects.
+3. Enter a text/JSON value or choose PDF, image, MP3, MP4, or another file in the online hashing field.
 4. Review the five evidence questions: who, what, when, where, and how.
-5. Choose Sealed Evidence or Commitment Only.
-6. Hash, canonicalise, encrypt, and submit.
+5. Choose Commitment Only or paid encrypted storage.
+6. Hash and canonicalise locally; encrypt only when paid storage is selected; submit the commitment package.
 7. Receive the signed receipt immediately.
 8. See `receipt issued`, `anchor pending`, `submitted`, and `confirmed` as separate states.
 
@@ -208,7 +213,8 @@ API flow:
 
 ### 5.2 Track M — API only for records
 
-- Supplier UI manages sources, keys, procedure definitions, categories, usage, and read-only history.
+- Supplier UI shows API credentials, sources, usage, errors, gap warnings, and the organisation's read-only Track M history.
+- The UI contains no create, edit, correct, retry-as-new, or delete controls for Track M event records.
 - Machine record creation is available only through scoped API credentials.
 - Sources may represent a fleet gateway, EHR integration, escrow platform, HRIS, robot, sensor, or other system.
 - Device/source signatures, global source sequence, instance sequence, clock quality, and gap detection are first-class evidence.
@@ -266,18 +272,22 @@ Starter templates accelerate learning but never restrict Supplier-defined events
 
 Confidential evidence is invitation-first:
 
-1. Supplier creates and publishes a scope with explicit event IDs and cutoff.
+1. Supplier authorises one named Verifier or organisation team for one event type and allowed time boundary.
 2. Supplier selects a named Verifier account, verified organisation, or invited email.
-3. Supplier chooses view, export, expiry, and future-event permissions.
+3. Supplier chooses the authorised event type, organisation/team boundary, and whether snapshot or live access is permitted. There is no evidence download permission in this version.
 4. The Verifier authenticates and accepts the invitation.
 5. Payment occurs only for an already-authorised scope, unless the Supplier sponsors it.
 6. OD activates the entitlement only when both grant and payment conditions are satisfied.
-7. OD returns ciphertext, wrapped keys, manifest, receipt, chain proof, Merkle path, and anchor reference.
-8. The Verifier client decrypts locally and recomputes original -> H -> manifest -> C.
+7. Outdock renders authorised records only in the web room. For Commitment Only, the Verifier supplies the externally received original locally; for paid storage, the browser receives a short-lived encrypted stream and decrypts locally.
+8. The Verifier browser recomputes original -> H -> manifest -> C.
 9. The client verifies the receipt, event chain, Merkle inclusion, and chain anchor.
-10. Every view, proof retrieval, export, denial, grant, and revocation is audited.
+10. Every view, reveal, comparison, payment, denial, grant, and revocation is audited. No evidence download or proof-bundle export is offered.
 
-A one-time scope remains a frozen snapshot. A live scope has explicit inclusion rules and a recurring entitlement. Expiry stops future retrieval but cannot erase evidence already decrypted or downloaded.
+One-time access uses half-open UTC boundaries `[start_at, end_at)`. Chargeable units are `ceil((end_at - start_at) / 604800)` at USD 25 per started seven-day unit. Recommended discount: units 1–6 cost USD 25 each and units 7+ cost USD 12.50 each. Do **not** discount the whole order at unit 7: seven units would fall from USD 150 for six units to USD 87.50 and create a pricing cliff.
+
+Live access covers exactly one event type. At activation time `T`, the readable event-time interval begins at `T - 30 days`; new matching events remain readable while the entitlement is active. The term ends at `T + 28 days`, so the first paid term spans up to 58 days of event time. Renewal advances the trailing start and live end continuously. Price: USD 88 every 28 days.
+
+Expiry stops new server retrieval but cannot erase anything a human has already seen, copied, photographed, or captured. Deterrence controls are organisation-bound seats, re-authentication, short-lived view tokens/keys, dynamic user/time watermarks, copy/print/download UI suppression, rate limits, anomaly detection, access logs, Supplier alerts, and contractual confidentiality. Court disclosure uses a separately logged legal-export process with authority and case reference.
 
 ## 8. Data placement
 
@@ -317,17 +327,24 @@ Proposed additive tables for a new migration:
 - `scope_key_envelopes`
 - `evidence_access_events`
 - `anchor_networks`
+- `verifier_products`
+- `verifier_orders`
+- `verifier_order_ranges`
+- `verifier_subscriptions`
+- `stripe_webhook_events`
+- `storage_allowances`
+- `storage_usage_ledger`
 
 Existing `cases`, `sources`, `events`, `evidence_scopes`, `evidence_scope_members`, `entitlements`, receipts, and anchor tables are migrated or bridged; historical immutable evidence is never rewritten.
 
 ### 8.2 R2
 
-Store only encrypted binary material:
+Store binary material only when the Supplier elects paid storage, and store it encrypted:
 
 - encrypted original evidence;
 - encrypted manifest and disclosure payload;
 - optional encrypted previews/derivatives;
-- encrypted export bundles.
+- no verifier export bundles.
 
 Use object keys without usernames, patient names, delivery names, or other sensitive semantics. D1 holds the authorised mapping. Upload finalisation verifies ciphertext size, checksum, ownership, and expected object state.
 
@@ -343,7 +360,7 @@ The chain adapter stores only:
 
 Never put plaintext, ciphertext, H, salt, usernames, business categories, file names, or confidential metadata on-chain.
 
-Polygon PoS may remain the first adapter, but product terminology and storage use `anchor_network`, not Polygon-specific names. Network selection evaluates cost, finality, explorer availability, decentralisation, operational reliability, and long-term verification. The receipt/proof format must identify the network, chain ID, contract, transaction, block, and confirmation policy.
+Use **Base** as the first production adapter and Base Sepolia for the new test deployment. It preserves the existing Solidity/EVM implementation path, publishes L2 transaction data to Ethereum through the OP Stack, has standard Ethereum JSON-RPC support, and is operationally simpler for this small commitment-only contract than adopting Cairo/Starknet or a chain-specific ZK stack. Polygon PoS remains a migration source, not the new product default. Product terminology and storage remain `anchor_network`, never Base-specific. The receipt/proof format identifies network, chain ID, contract, transaction, block, and confirmation policy so another adapter can be added without rewriting evidence.
 
 ## 9. Anchoring and cutoff semantics
 
@@ -354,13 +371,13 @@ OD separates four times:
 - `receipt_issued_at`: OD signature time;
 - `anchored_at`: independent chain time.
 
-Normal anchoring uses scheduled batches. High-assurance paths use `Seal now`:
+Normal anchoring closes batches daily by default; a lower-cost Supplier policy may close three times per week. High-assurance paths use `Seal now`:
 
-- normal traffic: time/size-triggered batches;
-- scope publication or purchase: close and submit a batch containing eligible unanchored events;
+- normal traffic: time/leaf-count-triggered batches, split deterministically into sub-batches when the configured leaf ceiling is reached;
+- scope purchase: create a priority micro-batch containing only the selected scope's currently unanchored event occurrences; already anchored leaves are never duplicated and unrelated Event B leaves stay in their normal batch;
 - premium API: optional immediate sealing for a selected event or micro-batch.
 
-At a scope cutoff, membership is frozen using explicit event IDs and a recorded `received_at` cutoff. The Verifier UI never calls an unanchored record “on-chain verified.” It displays anchored, submitted, pending, failed, and superseded states separately.
+Each event occurrence belongs to exactly one anchor leaf and one closed batch. A scope references those leaves; it does not rebuild historical Event A data. At a scope cutoff, membership is frozen using explicit event IDs and a recorded `received_at` cutoff. The Verifier UI never calls an unanchored record “on-chain verified.” It displays receipt issued, awaiting batch, submitted, confirmed, failed, and superseded separately.
 
 ## 10. Pricing upgrade
 
@@ -371,10 +388,10 @@ Replace the unapproved four-plan assumption with one coherent Supplier subscript
 Price components may include:
 
 - included monthly accepted events;
-- included encrypted evidence storage and download;
+- first 100 MB of optional encrypted evidence storage;
 - included scheduled anchoring;
 - API throughput and retention policy;
-- metered event/storage overage;
+- encrypted storage overage at USD 10 per additional started 100 MB, after the reset period is approved;
 - `Seal now` transactions; and
 - enterprise controls such as organisation recovery, SSO, regional storage, legal hold, and audit export.
 
@@ -384,10 +401,10 @@ Exact allowances and prices remain a product decision and must not be hard-coded
 
 Offer two clear products:
 
-1. **Snapshot access:** one-time fee for one Supplier-authorised immutable scope, with a stated hosted-access window and permanent offline verification of lawfully downloaded proof.
-2. **Live access:** recurring fee for an explicitly authorised evolving scope with future-event rules.
+1. **Range access:** one-time web access for one Supplier-authorised event type and selected `[start_at, end_at)` UTC range. Each started seven-day unit is USD 25; recommended marginal 50% discount begins at unit 7.
+2. **Live access:** USD 88 every 28 days for one Supplier-authorised event type, beginning with the previous 30 days and including matching new events during the active term.
 
-The Supplier may sponsor either product. Payment never makes a confidential scope discoverable or grants access without a Supplier grant. Download restrictions reduce casual leakage but cannot promise revocation after disclosure.
+The Supplier may sponsor either product. Payment never makes a confidential scope discoverable or grants access without a Supplier grant. Use one Stripe Product, `Outdock Verifier Event Access`, with one reusable Price for live access (`USD 88`, `interval=day`, `interval_count=28`). Calculate the one-time range total server-side and create Checkout line-item `price_data` for that order against the same Product. Create and bind these later as `STRIPE_VERIFIER_ACCESS_PRODUCT_ID` and `STRIPE_VERIFIER_LIVE_28D_PRICE_ID`; never invent their IDs in code or documentation. Persist Checkout Session, Subscription, Invoice, PaymentIntent, Product and Price references plus webhook idempotency in D1. Download restrictions reduce casual leakage but cannot promise revocation after disclosure.
 
 ### 10.3 Anchoring
 
@@ -418,10 +435,11 @@ Invitations
 Authorised scopes
 Evidence timeline
 Verification details
-Exports
 Access history
 Billing
 ```
+
+The interface is light-mode only. It uses one stable shell, strong section dividers, restrained colour, and one dominant task per view. At 1280×800 (a common 13-inch laptop viewport), the Proof Ladder remains visible without forcing the event input below the fold. At iPad Air widths, the ladder becomes a collapsible right drawer. On a narrow unfolded Galaxy Z Flip-class viewport, navigation becomes a bottom bar, lists precede detail views, and the event/hash chain becomes a vertically connected sequence. Installability, manifest, service worker, icons, offline shell, update prompt, and safe retry queue make it a PWA; confidential evidence and keys are never cached by the service worker.
 
 ### 11.2 Signature interaction
 
@@ -447,17 +465,20 @@ Each rung displays `verified`, `pending`, `not supplied`, or `failed`. It never 
 
 - Start from the active procedure instance, not a generic upload form.
 - Show the expected next steps while allowing authorised exception events.
-- Accept strings, JSON, PDFs, images, audio, video, and arbitrary files.
+- Track H alone exposes the online hashing input: paste text/JSON or choose PDF, PNG/JPEG, MP3, MP4, or another file. Show byte size, MIME type, local H, manifest preview, C, and storage choice before submit.
 - Show exact hashing rules and evidence mode before capture.
 - Return the signed receipt immediately and show anchor progress asynchronously.
+- Keep the chain-of-effect visual beside the form: Original (local only) -> H -> canonical manifest + salt -> C -> event proof -> Merkle leaf/root -> Base anchor.
+- Track M has no event-input surface. It shows read-only accepted/rejected history, source sequence, gap warnings, receipt state, and anchor state generated by API activity.
 
 ### 11.5 Verifier UI
 
 - Invitation page identifies the Supplier and scope before payment.
-- Payment page never reveals confidential event details.
+- Verifier CRUD is web-only: accept/decline invitation, choose the authorised event type and UTC range, select range or live access, pay through Stripe Checkout, manage team seats, and revoke sessions.
+- Before checkout, show only non-confidential Supplier identity, event-type label, chosen bounds, number of seven-day units, discounts, access term, and total.
 - Timeline groups events by procedure instance and preserves exact scope cutoff.
-- Evidence viewer shows who, what, when, where, and how alongside the Proof Ladder.
-- Export explains verification limits and distinguishes claimed, OD-observed, source-signed, and independently anchored facts.
+- Evidence viewer shows who, what, when, where, and how alongside the Proof Ladder. Commitment Only asks the Verifier to load the Supplier-provided original locally; paid storage reveals an authorised encrypted stream in-browser.
+- No download/export action appears. Persistent watermark and session identity remain visible while confidential evidence is revealed.
 
 ## 12. API plan
 
@@ -488,7 +509,7 @@ GET  /api/v2/verifier/events/:eventId/evidence
 POST /api/v2/verify
 ```
 
-All mutations require idempotency. Human and machine credentials have distinct scopes. Confidential lookup endpoints require both an active Supplier grant and entitlement. API responses distinguish proof finality and never embed private keys.
+All Supplier mutations require idempotency. Human and machine credentials have distinct scopes. Verifier endpoints are browser-session-only and are not issued general-purpose API keys. Confidential lookup endpoints require both an active Supplier grant and entitlement. API responses distinguish proof finality and never embed private keys.
 
 ## 13. Migration phases
 
@@ -496,7 +517,7 @@ All mutations require idempotency. Human and machine credentials have distinct s
 
 - Approve canonical terms and the Track H/Track M boundary.
 - Decide key recovery posture.
-- Approve Supplier charging dimensions and Verifier snapshot/live products.
+- Approve Supplier charging dimensions and Verifier range/live products.
 - Approve normal anchor cadence and `Seal now` service level.
 
 Exit criterion: glossary, pricing configuration, threat decisions, and API compatibility policy are signed off.
@@ -510,12 +531,11 @@ Exit criterion: glossary, pricing configuration, threat decisions, and API compa
 
 Exit criterion: logistics, healthcare, escrow, and employment templates pass normal and edge-case simulations.
 
-### Phase C — Add Sealed Evidence
+### Phase C — Add optional encrypted storage
 
-- Add R2 binding and encrypted multipart upload flow.
+- Keep Commitment Only as the default; add R2 binding and encrypted multipart upload only for Suppliers who elect storage.
 - Add evidence objects, encryption identities, key envelopes, recovery policy, and deletion/retention state.
-- Add Track H UI/API and Track M API support for encrypted originals.
-- Preserve Commitment Only as an explicit alternative.
+- Add Track H UI/API and Track M API support for optional encrypted originals without adding Track M UI writes.
 
 Exit criterion: string, JSON, PDF, image, MP3, and MP4 round-trip without plaintext reaching Worker application storage or logs; altered ciphertext, evidence, manifest, salt, or key envelope fails verification.
 
@@ -523,15 +543,15 @@ Exit criterion: string, JSON, PDF, image, MP3, and MP4 round-trip without plaint
 
 - Add scope versions, invitations, grants, recipient-bound envelopes, and access audit.
 - Gate checkout behind an approved invitation.
-- Add snapshot and live entitlements.
+- Add range and live entitlements.
 - Add Proof Ladder and evidence comparison UI/API.
 
 Exit criterion: an uninvited payer cannot discover or decrypt evidence; a named Verifier can independently recompute the complete proof.
 
-### Phase E — Chain abstraction and finality
+### Phase E — Base adapter and finality
 
 - Replace Polygon-specific product names with an anchor adapter and network registry.
-- Keep the current audited contract format as the first adapter where appropriate.
+- Deploy the versioned commitment contract to Base Sepolia, verify bytecode/source, run proof fixtures, then deploy the approved build to Base mainnet.
 - Implement scheduled close, `Seal now`, retry, replacement, confirmation, and reorganisation handling.
 - Version proof packages so old anchors remain independently verifiable.
 
@@ -544,7 +564,7 @@ Exit criterion: pending and confirmed states are correct under delay, failure, d
 - Backfill existing development data through explicit bridge records without rewriting immutable evidence.
 - Run production migration, security review, browser/API journeys, and disaster-recovery drills.
 
-Exit criterion: billing cannot create access without authorisation; expired access blocks retrieval while downloaded proof remains verifiable.
+Exit criterion: billing cannot create access without authorisation; expiry blocks new retrieval; no Verifier download/export control exists; authorised court export is a separately logged path.
 
 ## 14. Linear-ready backlog
 
@@ -557,12 +577,12 @@ Linear is not connected in this workspace. The following issues are ready to cop
 - **OD-103: Procedure validation service** — validate required, optional, repeatable, conditional, and terminal steps. Acceptance: invalid transitions return actionable errors without deleting or mutating evidence.
 - **OD-104: Starter procedure templates** — logistics, healthcare, escrow, employment, and blank custom. Acceptance: each template includes edge-case simulations and versioning.
 
-### Epic OD-200 — Sealed Evidence
+### Epic OD-200 — Commitment and optional encrypted storage
 
-- **OD-201: R2 encrypted evidence binding** — provision dev/prod ciphertext buckets with non-semantic object keys.
+- **OD-201: Optional R2 encrypted evidence binding** — provision dev/prod ciphertext buckets with non-semantic object keys; never create objects in Commitment Only mode.
 - **OD-202: Evidence-object D1 model** — persist hash, media type, byte count, encryption version, R2 state, and owner linkage.
 - **OD-203: Client encryption package** — hash exact bytes, canonicalise manifest, generate DEK, encrypt, and wrap keys.
-- **OD-204: Resumable upload/finalisation** — support large PDF/image/audio/video evidence with idempotent finalisation.
+- **OD-204: Paid storage metering and upload** — include the first 100 MB, meter each additional started 100 MB at USD 10, and support idempotent resumable upload.
 - **OD-205: Commitment Only mode** — retain privacy-minimal flow with explicit unrecoverability warning.
 - **OD-206: Key recovery decision and implementation** — implement only the approved zero-knowledge or managed-recovery posture.
 
@@ -576,18 +596,18 @@ Linear is not connected in this workspace. The following issues are ready to cop
 
 ### Epic OD-400 — Verifier rooms
 
-- **OD-401: Scope version and cutoff model** — immutable event membership for snapshot scopes and explicit rules for live scopes.
+- **OD-401: Scope version and cutoff model** — immutable event membership for one-time ranges and explicit rolling rules for live scopes.
 - **OD-402: Invitation and Supplier approval** — no confidential discovery or checkout without a grant.
 - **OD-403: Recipient encryption identity** — register Verifier public keys and create recipient-bound scope envelopes.
-- **OD-404: Evidence room UI/API** — retrieve and locally decrypt authorised evidence.
+- **OD-404: Web-only evidence room** — locally compare Supplier-provided originals or reveal authorised encrypted streams without download controls.
 - **OD-405: Proof Ladder** — independently report evidence, commitment, receipt, chain, and public-anchor results.
-- **OD-406: Access audit and export policy** — record view, download, proof retrieval, denial, grant, and revocation.
+- **OD-406: Disclosure controls and audit** — organisation seats, dynamic watermark, short-lived sessions/keys, rate limits, legal-export exception, and view/denial/grant/revocation audit.
 
 ### Epic OD-500 — Anchoring
 
 - **OD-501: Anchor-network registry and adapter interface** — remove Polygon-specific assumptions from product/domain layers.
 - **OD-502: Scheduled batch policy** — close by time and size with deterministic manifests.
-- **OD-503: Seal now** — close a batch when an authorised scope requires immediate independent finality.
+- **OD-503: Scope priority micro-batch** — anchor only selected, currently unanchored scope leaves without duplicating prior leaves or pulling unrelated events forward.
 - **OD-504: Confirmation and reorganisation state machine** — never report premature finality.
 - **OD-505: Cross-network proof fixtures** — retain independent verification across adapter versions.
 
@@ -595,15 +615,16 @@ Linear is not connected in this workspace. The following issues are ready to cop
 
 - **OD-601: Remove unapproved four-tier Supplier model** — replace legacy constants only after approved pricing configuration exists.
 - **OD-602: Supplier subscription and metering** — one Supplier identity across H/M, with approved allowances and overage rules.
-- **OD-603: Verifier snapshot checkout** — invitation-gated one-time scope access.
-- **OD-604: Verifier live checkout** — invitation-gated recurring access with future-event rules.
+- **OD-603: Verifier range checkout** — invitation-gated UTC range access at USD 25 per started seven days with marginal half-price units from unit 7.
+- **OD-604: Verifier live checkout** — USD 88 per 28 days for one event type, with a 30-day lookback and matching new events through the active term.
 - **OD-605: Sponsored access** — allow Supplier-paid Verifier entitlement.
 - **OD-606: Seal-now billing** — charge or include immediate anchoring according to approved policy.
 
 ### Epic OD-700 — Production assurance
 
-- **OD-701: Threat model and privacy review** — key loss, malicious Supplier, guessing, replay, unauthorised payment, insider access, metadata leakage, and downloaded-data limits.
-- **OD-702: End-to-end browser journeys** — Supplier builder, H UI/API, M API, invitation, checkout, decrypt, compare, anchor, export.
+- **OD-701: Threat model and privacy review** — key loss, malicious Supplier, guessing, replay, unauthorised payment, insider access, metadata leakage, browser disclosure limits, and court-export controls.
+- **OD-702: End-to-end browser journeys** — Supplier builder, H UI/API, M API/read-only UI, invitation, range/live checkout, local compare, authorised reveal, and anchor.
+- **OD-706: PWA and responsive shell** — light-only installable shell verified at 1280×800, iPad Air portrait/landscape, and narrow Galaxy Z Flip-class unfolded viewport; never cache confidential evidence or keys.
 - **OD-703: High-volume and tenant-isolation tests** — prove indexes, batching, Durable Object partitioning, storage quotas, and tenant boundaries at target scale.
 - **OD-704: Backup and recovery drill** — D1 metadata, R2 ciphertext, key registry, receipt keys, and proof reconstruction.
 - **OD-705: Production migration and rollback runbook** — reversible application rollout without rewriting immutable evidence.
@@ -613,23 +634,22 @@ Linear is not connected in this workspace. The following issues are ready to cop
 The upgrade is not complete until these journeys pass through rendered UI and real APIs:
 
 1. A logistics Supplier defines categories, publishes a delivery procedure, starts an instance, submits Track H events through UI and API, and submits machine events only through Track M API.
-2. A hospital seals an encrypted PDF and video, grants a named insurer, and proves an uninvited paid account cannot access either object.
+2. A hospital uses Commitment Only for a PDF and video, grants a named insurer, and the insurer recomputes both locally from separately supplied originals; an uninvited paid account cannot access metadata or proof.
 3. An escrow company appends a corrected agreement without altering the first agreement and exports both versions with their chain relationship.
 4. An employer defines a status-change procedure with suspension, reinstatement, and termination branches and retains the procedure version used by every instance.
-5. A Verifier receives a frozen scope, decrypts locally, recomputes original -> H -> C, verifies receipt/chain/Merkle/anchor, and sees all timing distinctions.
-6. A live Verifier receives only future events permitted by the live-scope rule; a snapshot buyer receives none.
-7. A scope published before the normal anchor window triggers `Seal now`, remains visibly pending until confirmation, and never claims an earlier public-chain time.
+5. A Verifier buys a selected UTC range, recomputes original -> H -> C in the web UI, verifies receipt/chain/Merkle/anchor, and sees all timing distinctions without a download action.
+6. A live Verifier activated at `T` sees the selected event type from `T - 30 days` through new events before `T + 28 days`; a range buyer sees only the purchased half-open range.
+7. A purchase containing unanchored Event A leaves triggers a priority micro-batch for those leaves only, remains visibly pending until confirmation, and never duplicates prior leaves or claims an earlier public-chain time.
 8. A lost or altered original, manifest, salt, ciphertext, envelope, receipt, chain link, Merkle path, or anchor reference produces a specific failed rung in the Proof Ladder.
 
 ## 16. Decisions required before implementation
 
 - Zero-knowledge key handling or managed recovery?
-- Is Sealed Evidence mandatory, default, or optional per procedure?
+- Does the included 100 MB storage allowance reset monthly, every 28 days, or never? Is unused allowance carried forward?
 - Exact Supplier base price, included events/storage/egress, and overage policy?
-- Exact one-time Verifier snapshot price and hosted-access window?
-- Exact live Verifier subscription price and future-event rules?
+- Confirm marginal (recommended) rather than whole-order 50% discount from the seventh one-time unit.
+- How long may a one-time range buyer revisit the web room: 24 hours, 7 days, or another hosted-access term?
 - Who pays for Verifier access: Verifier, Supplier, or either?
 - Normal anchor cadence, target confirmation policy, and `Seal now` price/SLA?
-- Which chain/network is the first production anchor after cost, finality, availability, and explorer review?
+- Required Base confirmation policy and whether a later Ethereum L1 checkpoint is needed for court-grade packages?
 - Required compliance posture and storage regions for healthcare, insurance, escrow, and employment evidence?
-
