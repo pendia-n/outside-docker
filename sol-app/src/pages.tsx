@@ -1,7 +1,7 @@
 const Brand = () => (
-  <a class="brand" href="/" aria-label="Outside Docker home">
+  <a class="brand" href="/" aria-label="Outdock home">
     <img class="brand-logo" src="/od.svg" alt="" />
-    <span>Outside Docker</span>
+    <span>Outdock</span>
   </a>
 )
 
@@ -23,12 +23,12 @@ export const LandingPage = () => (
       <div class="hero-copy">
         <p class="eyebrow">EVENT-CHAIN INTEGRITY FOR THE REAL WORLD</p>
         <h1>Make every record<br /><em>defensible.</em></h1>
-        <p class="hero-lede">Outside Docker preserves the integrity of human documents and machine logs without storing the original content. Capture what happened. Prove what changed. Show the chain.</p>
+        <p class="hero-lede">Outdock preserves the integrity of human documents and machine logs without storing the original content by default. Capture what happened. Prove what changed. Show the chain.</p>
         <div class="hero-actions">
           <a class="button" href="#register-card">Create your account <span>→</span></a>
           <a class="text-link" href="/verify">Verify a shared proof <span>↗</span></a>
         </div>
-        <p class="micro-note"><span class="status-dot"></span> Local commitments · signed receipts · Polygon batch anchors</p>
+        <p class="micro-note"><span class="status-dot"></span> Local commitments · signed receipts · Base batch anchors</p>
       </div>
       <div class="hero-art" aria-label="An intact four-event proof chain">
         <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
@@ -36,7 +36,7 @@ export const LandingPage = () => (
           <div class="proof-top"><span class="live-dot"></span><span>CHAIN STATUS</span><strong>INTACT</strong></div>
           <div class="proof-line"><span class="node active"></span><span class="line"></span><span class="node active"></span><span class="line"></span><span class="node active"></span><span class="line"></span><span class="node active"></span></div>
           <div class="proof-meta"><span>CAPTURED</span><span>LINKED</span><span>RECEIPTED</span><span>ANCHORED</span></div>
-          <div class="proof-hash">sha256 · receipt · merkle · polygon</div>
+          <div class="proof-hash">sha256 · receipt · merkle · base</div>
         </div>
       </div>
     </section>
@@ -48,7 +48,7 @@ export const LandingPage = () => (
       <div class="feature-grid">
         <article class="feature-card"><span class="feature-number">01</span><h3>Capture privately</h3><p>Your browser or gateway hashes exact bytes or canonical JSON. Original content remains under your control.</p></article>
         <article class="feature-card"><span class="feature-number">02</span><h3>Link the sequence</h3><p>A Durable Object assigns every position and previous proof, preventing concurrent appends from forking a chain.</p></article>
-        <article class="feature-card"><span class="feature-number">03</span><h3>Anchor independently</h3><p>Signed receipts arrive immediately. Merkle batches later add a Polygon transaction and portable membership proof.</p></article>
+        <article class="feature-card"><span class="feature-number">03</span><h3>Anchor independently</h3><p>Signed receipts arrive immediately. Merkle batches later add a Base transaction and independently verifiable membership proof.</p></article>
       </div>
     </section>
 
@@ -73,19 +73,14 @@ export const LandingPage = () => (
         <section id="register-card">
           <form id="register" novalidate>
             <label>Username<input name="username" required pattern="[a-z0-9_-]{3,32}" autocomplete="username" /></label><p id="availability" class="hint" aria-live="polite"></p>
-            <label>Password<input name="password" type="password" required minLength={7} autocomplete="new-password" /></label><p class="hint">At least 7 characters with uppercase, lowercase, number, and symbol.</p>
-            <label>Email <span class="optional">optional Gmail</span><input name="email" type="email" autocomplete="email" /></label>
+            <label>Password<input name="password" type="password" required minLength={7} maxLength={18} autocomplete="new-password" /></label><p id="password-validity" class="hint" aria-live="polite">Use 7–18 characters with at least one letter and one number.</p>
+            <label>Email <span class="optional">optional Gmail or Hotmail recovery</span><input name="email" type="email" autocomplete="email" /></label>
             <label>Role<select name="role"><option value="supplier">Supplier</option><option value="verifier">Verifier</option></select></label>
             <div id="supplier-fields">
               <label>Initial mode<select name="initial_mode"><option value="H">Track H</option><option value="M">Track M</option><option value="both">Both</option></select></label>
-              <label>Plan<select name="plan_code"><option value="A">A · $99/month</option><option value="B">B · $299/month</option><option value="C">C · $799/month</option><option value="D">D · $1,999/month</option></select></label>
-              <label>Legal organization<input name="organization" autocomplete="organization" /></label>
-              <label>Address line 1<input name="address_line1" autocomplete="address-line1" /></label>
-              <label>Address line 2 <span class="optional">optional</span><input name="address_line2" autocomplete="address-line2" /></label>
-              <div class="grid"><label>City<input name="city" autocomplete="address-level2" /></label><label>Region<input name="region" autocomplete="address-level1" /></label></div>
-              <div class="grid"><label>Postal code<input name="postal_code" autocomplete="postal-code" /></label><label>Country<input name="country" autocomplete="country-name" /></label></div>
+              <p class="field-note">Choose the records this Supplier account can create. Organization and billing details are completed after sign-in.</p>
             </div>
-            <div id="verifier-fields" hidden><label>Evidence scope ID<input name="scope_id" placeholder="Provided by the supplier" /></label><p class="field-note">Read Passes are one-time, scope-specific access for 30 days. They do not renew automatically.</p></div>
+            <div id="verifier-fields" hidden><p class="field-note">Create your Verifier account first. Invitations, event selection, and payment happen inside your workspace.</p></div>
             <button class="button" type="submit">Continue securely <span>→</span></button>
           </form>
           <div id="register-result" class="form-result" aria-live="polite"></div>
@@ -101,14 +96,14 @@ export const LandingPage = () => (
     <section id="faq" class="faq-section">
       <div class="section-intro"><p class="eyebrow">QUESTIONS, ANSWERED</p><h2>Good records deserve<br />clear explanations.</h2></div>
       <div class="faq-list">
-        <details open><summary>Does Outside Docker store my original file?</summary><p>No. Track H hashes the selected file in your browser. Track M gateways submit hashes or ephemeral structured content; original files are never retained.</p></details>
+        <details open><summary>Does Outdock store my original file?</summary><p>No, not by default. Track H hashes the selected file in your browser. Track M accepts hashes or ephemeral structured content; original files are never retained by the evidence API.</p></details>
         <details><summary>Does a valid proof mean the content is true?</summary><p>No. It proves capture and post-capture integrity. Truthfulness, authorship, and capture quality remain separate questions.</p></details>
         <details><summary>What is paid and what is free?</summary><p>Supplier writing requires a plan in production. A verifier pays for a 30-day read-only workspace scoped to selected evidence. Anyone can validate a deliberately shared portable proof for free.</p></details>
-        <details><summary>What happens before Polygon confirmation?</summary><p>The signed receipt and hash chain are valid immediately and clearly marked pending. Anchoring later adds Merkle and Polygon evidence.</p></details>
+        <details><summary>What happens before Base confirmation?</summary><p>The signed receipt and hash chain are valid immediately and clearly marked pending. Anchoring later adds Merkle and Base evidence.</p></details>
       </div>
     </section>
 
-    <footer class="footer"><Brand /><p>Integrity infrastructure for human and machine records.</p><div><a href="mailto:pendia-community@protonmail.com">pendia-community@protonmail.com</a><a href="mailto:earthlyfirely@gmail.com">earthlyfirely@gmail.com</a></div><small>© 2026 Outside Docker · Integrity preservation, not a truth guarantee.</small></footer>
+    <footer class="footer"><Brand /><p>Integrity infrastructure for human and machine records.</p><div><a href="mailto:pendia-community@protonmail.com">pendia-community@protonmail.com</a><a href="mailto:earthlyfirely@gmail.com">earthlyfirely@gmail.com</a></div><small>© 2026 Outdock · Integrity preservation, not a truth guarantee.</small></footer>
   </main>
 )
 
@@ -119,16 +114,16 @@ const AppPanel = ({ id, title, eyebrow, children, active = false }: { id: string
   </section>
 )
 
-export const ApplicationPage = () => (
-  <main class="app-shell" data-page="app">
+export const ApplicationPage = ({ role, supplierMode }: { role: 'supplier' | 'verifier'; supplierMode?: 'H' | 'M' | 'both' | null }) => (
+  <main class="app-shell" data-page="app" data-role={role}>
     <aside class="app-sidebar">
       <Brand />
       <nav class="app-nav" aria-label="Application">
         <button class="active" data-target="overview">Overview</button>
-        <button data-target="human" data-mode="H">Track H</button>
-        <button data-target="machine" data-mode="M">Track M</button>
-        <button data-target="verifier" data-role="verifier">Verifier</button>
-        <button data-target="proofs">Proofs &amp; shares</button>
+        {role === 'supplier' && (supplierMode === 'H' || supplierMode === 'both') && <button data-target="human" data-mode="H">Track H</button>}
+        {role === 'supplier' && (supplierMode === 'M' || supplierMode === 'both') && <button data-target="machine" data-mode="M">Track M</button>}
+        {role === 'verifier' && <button data-target="verifier">Event access</button>}
+        {role === 'supplier' && <button data-target="proofs">Proofs &amp; sharing</button>}
         <button data-target="billing">Billing</button>
         <button data-target="security">Security</button>
       </nav>
@@ -142,28 +137,28 @@ export const ApplicationPage = () => (
         <div class="dashboard-grid"><section class="surface"><h2>Recent receipts</h2><div id="recent-receipts" class="empty-state">No receipts loaded.</div></section><section class="surface"><h2>Access</h2><div id="account-summary" class="key-value"></div></section></div>
       </AppPanel>
 
-      <AppPanel id="human" title="Human evidence" eyebrow="TRACK H">
+      {role === 'supplier' && (supplierMode === 'H' || supplierMode === 'both') && <AppPanel id="human" title="Human evidence" eyebrow="TRACK H">
         <div class="dashboard-grid human-grid">
           <section class="surface"><div class="surface-title"><h2>Cases</h2><button class="quiet-button" data-dialog="case-form">New case</button></div><form id="case-form" class="compact-form" hidden><label>Case reference<input name="case_ref" required /></label><label>Title<input name="title" required /></label><label>Category<input name="category" /></label><label>Description<textarea name="description" rows={3}></textarea></label><button class="button button-small">Create case</button></form><div id="case-list" class="record-list"></div></section>
           <section class="surface"><div class="surface-title"><h2 id="case-title">Select a case</h2><button class="quiet-button" data-dialog="event-form" disabled id="add-event-button">Add event</button></div><form id="event-form" class="compact-form" hidden><label>Event type<input name="event_type" required placeholder="INCIDENT_REPORTED" /></label><label>Occurred at<input name="occurred_at" type="datetime-local" /></label><label>Local file <span class="optional">never uploaded</span><input name="file" type="file" /></label><label>Or structured note<textarea name="structured_text" rows={3}></textarea></label><label>Portable-proof passcode<input name="passcode" type="password" required autocomplete="new-password" /></label><label>Corrects event <span class="optional">optional ID</span><input name="corrects_event_id" /></label><button class="button button-small">Hash and append</button></form><div id="case-timeline" class="timeline empty-state">Select a case to inspect its append-only timeline.</div></section>
         </div>
-      </AppPanel>
+      </AppPanel>}
 
-      <AppPanel id="machine" title="Machine records" eyebrow="TRACK M · READ-ONLY DATA">
+      {role === 'supplier' && (supplierMode === 'M' || supplierMode === 'both') && <AppPanel id="machine" title="Machine records" eyebrow="TRACK M · API OPERATIONS">
         <div class="dashboard-grid"><section class="surface"><div class="surface-title"><h2>API keys</h2><button class="quiet-button" data-dialog="api-key-form">Create key</button></div><form id="api-key-form" class="compact-form" hidden><label>Label<input name="label" required /></label><fieldset><legend>Scopes</legend><label class="check-row"><input type="checkbox" name="scopes" value="source:write" checked /> source:write</label><label class="check-row"><input type="checkbox" name="scopes" value="record:write" checked /> record:write</label><label class="check-row"><input type="checkbox" name="scopes" value="record:batch" /> record:batch</label><label class="check-row"><input type="checkbox" name="scopes" value="receipt:read" checked /> receipt:read</label><label class="check-row"><input type="checkbox" name="scopes" value="usage:read" checked /> usage:read</label></fieldset><button class="button button-small">Create once-visible key</button></form><div id="api-key-result" class="secret-result" hidden></div><div id="api-key-list" class="record-list"></div></section><section class="surface"><div class="surface-title"><h2>Sources</h2><button class="quiet-button" data-dialog="source-form">Register source</button></div><form id="source-form" class="compact-form" hidden><label>Source reference<input name="source_id" required placeholder="drone-07" /></label><label>Label<input name="label" required /></label><label>Sequence policy<select name="out_of_order_policy"><option value="strict">Strict</option><option value="accept_and_flag">Accept and flag</option></select></label><button class="button button-small">Register source</button></form><div id="source-list" class="record-list"></div></section></div>
         <section class="surface app-wide"><div class="surface-title"><h2>Machine event stream</h2><span id="machine-usage" class="hint">Submitted only through the API</span></div><div id="machine-events" class="timeline empty-state">No machine records loaded.</div></section>
-      </AppPanel>
+      </AppPanel>}
 
-      <AppPanel id="verifier" title="Read-only review" eyebrow="VERIFIER WORKSPACE">
+      {role === 'verifier' && <AppPanel id="verifier" title="Purchased event access" eyebrow="VERIFIER WORKSPACE">
         <div class="dashboard-grid"><section class="surface"><h2>Paid scopes</h2><div id="verifier-scope-list" class="record-list"></div></section><section class="surface"><h2 id="verifier-scope-title">Select a scope</h2><div id="verifier-scope-detail" class="timeline empty-state">Only events explicitly included in a valid entitlement appear here.</div></section></div>
-      </AppPanel>
+      </AppPanel>}
 
-      <AppPanel id="proofs" title="Proofs and controlled sharing" eyebrow="PORTABLE EVIDENCE">
+      {role === 'supplier' && <AppPanel id="proofs" title="Proofs and controlled sharing" eyebrow="SUPPLIER EVIDENCE">
         <div class="dashboard-grid"><section class="surface"><h2>Verify locally</h2><form id="workspace-verify-form" class="compact-form"><label>.odproof package<input name="proof_file" type="file" accept=".odproof,application/json" required /></label><label>Passcode<input name="passcode" type="password" /></label><label>Original file <span class="optional">optional comparison</span><input name="original_file" type="file" /></label><button class="button button-small">Verify every layer</button></form><div id="workspace-verify-result" class="verification-result"></div></section><section class="surface"><div class="surface-title"><h2>Shares</h2><button class="quiet-button" data-dialog="share-form">New share</button></div><form id="share-form" class="compact-form" hidden><label>Evidence scope<select name="scope_id" id="share-scope-select"></select></label><label>Expires in days<input name="expires_days" type="number" min="1" max="365" value="30" /></label><button class="button button-small">Create share link</button></form><div id="share-result" class="secret-result" hidden></div><div id="share-list" class="record-list"></div></section></div>
-      </AppPanel>
+      </AppPanel>}
 
-      <AppPanel id="billing" title="Plans and access" eyebrow="BILLING">
-        <div class="dashboard-grid"><section class="surface"><h2>Current entitlements</h2><div id="entitlement-list" class="record-list"></div></section><section class="surface" id="supplier-billing-controls"><h2>Manage plan</h2><p>Production checkout is hosted by Stripe. Payment methods are selected dynamically from your Stripe settings.</p><form id="billing-checkout" class="compact-form"><label>Plan<select name="plan_code"><option value="A">A · $99/month</option><option value="B">B · $299/month</option><option value="C">C · $799/month</option><option value="D">D · $1,999/month</option></select></label><button class="button button-small">Open secure checkout</button></form><button id="billing-portal" class="quiet-button">Open customer portal</button></section><section class="surface" id="verifier-billing-note" hidden><h2>Read Passes</h2><p>Each paid scope is independent and remains read-only for 30 days. Open a supplier invitation to add another scope.</p></section></div>
+      <AppPanel id="billing" title={role === 'supplier' ? 'Supplier plan' : 'Purchases and access'} eyebrow="BILLING">
+        <div class="dashboard-grid"><section class="surface"><h2>Current entitlements</h2><div id="entitlement-list" class="record-list"></div></section>{role === 'supplier' ? <section class="surface" id="supplier-billing-controls"><h2>Manage plan</h2><p>Production checkout is hosted by Stripe. Payment methods are selected dynamically from your Stripe settings.</p><form id="billing-checkout" class="compact-form"><label>Plan<select name="plan_code"><option value="A">A · $99/month</option><option value="B">B · $299/month</option><option value="C">C · $799/month</option><option value="D">D · $1,999/month</option></select></label><button class="button button-small">Open secure checkout</button></form><button id="billing-portal" class="quiet-button">Open customer portal</button></section> : <section class="surface" id="verifier-billing-note"><h2>No active invitation selected</h2><p>Accept a Supplier invitation, choose an event and time range, then review the server-calculated price before Stripe Checkout.</p></section>}</div>
       </AppPanel>
 
       <AppPanel id="security" title="Account security" eyebrow="SECURITY">
@@ -181,7 +176,7 @@ export const VerifyPage = ({ shareToken = '' }: { shareToken?: string }) => (
       <form id="public-verify-form" class="surface compact-form"><label>.odproof package<input name="proof_file" type="file" accept=".odproof,application/json" /></label><label>Passcode <span class="optional">if encrypted</span><input name="passcode" type="password" /></label><label>Original file <span class="optional">optional content comparison</span><input name="original_file" type="file" /></label><button class="button">Verify proof <span>→</span></button></form>
       <section id="public-verify-result" class="surface verification-result"><div class="empty-state">Choose a portable proof or open a supplier share link.</div></section>
     </section>
-    <section class="verification-explainer"><article><span>1</span><h2>Receipt</h2><p>Checks the public-key signature over the exact canonical receipt.</p></article><article><span>2</span><h2>Sequence</h2><p>Recomputes content and event proofs from the included chain material.</p></article><article><span>3</span><h2>Anchor</h2><p>Checks Merkle membership and the published Polygon batch reference when available.</p></article></section>
+    <section class="verification-explainer"><article><span>1</span><h2>Receipt</h2><p>Checks the public-key signature over the exact canonical receipt.</p></article><article><span>2</span><h2>Sequence</h2><p>Recomputes content and event proofs from the included chain material.</p></article><article><span>3</span><h2>Anchor</h2><p>Checks Merkle membership and the published Base batch reference when available.</p></article></section>
   </main>
 )
 

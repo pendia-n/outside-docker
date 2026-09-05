@@ -162,7 +162,11 @@ export const ChainCoordinator = createChainDurableObject<Env>({
 })
 
 app.get('/', (context) => context.render(<LandingPage />))
-app.get('/app', (context) => context.render(<ApplicationPage />))
+app.get('/app', async (context) => {
+  const actor = await sessionFor(context)
+  if (!actor) return context.redirect('/#login-card')
+  return context.render(<ApplicationPage role={actor.user.role} supplierMode={actor.supplierMode} />)
+})
 app.get('/verify', (context) => context.render(<VerifyPage />))
 app.get('/verify/:token', (context) => context.render(<VerifyPage shareToken={context.req.param('token')} />))
 app.get('/checkout/success', (context) => context.render(<CheckoutStatusPage state="success" />))
@@ -173,7 +177,7 @@ app.get('/health', (context) => context.json({
   app: 'outside-docker',
   environment: context.env.ENV,
   database: context.env.ENV === 'prod' ? 'DB_PROD' : 'DB_DEV',
-  polygon_chain_id: context.env.POLYGON_CHAIN_ID,
+  base_chain_id: context.env.ENV === 'prod' ? context.env.BASE_CHAIN_ID_PROD : context.env.BASE_CHAIN_ID_DEV,
 }))
 
 app.route('/api', createAccountRoutes())
@@ -286,16 +290,16 @@ async function trustedReceiptKeys(database: D1Database, environment: Env['ENV'])
 function polygonVerifier(environment: Env) {
   return async (anchor: NonNullable<PortableProofV1['anchor']>): Promise<boolean> => {
     const configuredAddress = environment.ENV === 'prod'
-      ? required(environment, 'POLYGON_CONTRACT_ADDRESS_PROD')
-      : required(environment, 'POLYGON_CONTRACT_ADDRESS_DEV')
+      ? required(environment, 'BASE_CONTRACT_ADDRESS_PROD')
+      : required(environment, 'BASE_CONTRACT_ADDRESS_DEV')
     if (
-      anchor.chain_id !== environment.POLYGON_CHAIN_ID
+      anchor.chain_id !== (environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV)
       || anchor.contract_address.toLowerCase() !== configuredAddress.toLowerCase()
-      || !environment.POLYGON_RPC_URL
+      || !environment.BASE_RPC_URL
     ) return false
     const provider = new JsonRpcProvider(
-      environment.POLYGON_RPC_URL,
-      Number(environment.POLYGON_CHAIN_ID),
+      environment.BASE_RPC_URL,
+      Number(environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV),
       { staticNetwork: true },
     )
     const contract = new Contract(configuredAddress, [
@@ -556,17 +560,17 @@ app.notFound((context) => context.json({
 }, 404))
 
 async function runAnchoring(environment: Env): Promise<void> {
-  if (!environment.POLYGON_RPC_URL || !environment.POLYGON_PRIVATE_KEY) return
+  if (!environment.BASE_RPC_URL || !environment.BASE_PRIVATE_KEY) return
   const contractAddress = environment.ENV === 'prod'
-    ? environment.POLYGON_CONTRACT_ADDRESS_PROD
-    : environment.POLYGON_CONTRACT_ADDRESS_DEV
+    ? environment.BASE_CONTRACT_ADDRESS_PROD
+    : environment.BASE_CONTRACT_ADDRESS_DEV
   if (!contractAddress) return
   const provider = new JsonRpcProvider(
-    environment.POLYGON_RPC_URL,
-    Number(environment.POLYGON_CHAIN_ID),
+    environment.BASE_RPC_URL,
+    Number(environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV),
     { staticNetwork: true },
   )
-  const signer = new Wallet(environment.POLYGON_PRIVATE_KEY, provider)
+  const signer = new Wallet(environment.BASE_PRIVATE_KEY, provider)
   const contract = new Contract(contractAddress, [
     'function anchorBatch(bytes32 batchId, bytes32 merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount) returns (uint256)',
   ], signer) as unknown as EthersAnchorContractLike
@@ -594,11 +598,11 @@ async function runAnchoring(environment: Env): Promise<void> {
     anchorClient,
     {
       environment: environment.ENV,
-      chainId: environment.POLYGON_CHAIN_ID,
-      network: environment.ENV === 'prod' ? 'polygon' : 'polygon-amoy',
+      chainId: environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV,
+      network: environment.ENV === 'prod' ? 'base' : 'base-sepolia',
       contractAddress,
       batchSize: 500,
-      confirmations: Number(environment.POLYGON_CONFIRMATIONS || 3),
+      confirmations: Number(environment.BASE_CONFIRMATIONS || 3),
     },
   )
   await service.runScheduled()

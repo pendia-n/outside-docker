@@ -1,6 +1,10 @@
 (() => {
   'use strict'
 
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined))
+  }
+
   const page = document.querySelector('[data-page]')?.dataset.page
   const encoder = new TextEncoder()
   const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -246,8 +250,6 @@
       const supplier = role.value === 'supplier'
       supplierFields.hidden = !supplier
       verifierFields.hidden = supplier
-      for (const field of $$('input,select', supplierFields)) field.required = supplier && ['organization', 'address_line1', 'city', 'postal_code', 'country'].includes(field.name)
-      $('[name=scope_id]', verifierFields).required = !supplier
     }
 
     tabs.forEach((tab) => tab.addEventListener('click', (event) => {
@@ -265,6 +267,15 @@
     role.addEventListener('change', updateRoleFields)
     updateRoleFields()
     if (location.hash === '#login-card') showAccess('login', false)
+
+    register.elements.password.addEventListener('input', () => {
+      const value = register.elements.password.value
+      const valid = value.length >= 7 && value.length <= 18 && /[A-Za-z]/.test(value) && /\d/.test(value)
+      register.elements.password.setCustomValidity(value && !valid ? 'Use 7–18 characters with at least one letter and one number.' : '')
+      const feedback = $('#password-validity')
+      feedback.textContent = valid ? '✓ Password meets the security requirements.' : 'Use 7–18 characters with at least one letter and one number.'
+      feedback.classList.toggle('valid', valid)
+    })
 
     let availabilityRequest = 0
     let availabilityTimer
@@ -757,20 +768,20 @@
     const status = complete ? 'VERIFIED' : partial ? 'PARTIALLY VERIFIED' : 'VERIFICATION FAILED'
     const summary = complete
       ? result.anchorPresent
-        ? 'Every required layer, including the Polygon anchor, was verified.'
-        : 'The signed pre-anchor proof is valid. Polygon anchoring is still pending.'
+        ? 'Every required layer, including the Base anchor, was verified.'
+        : 'The signed pre-anchor proof is valid. Base anchoring is still pending.'
       : partial
-        ? 'The included cryptographic layers are consistent, but the Polygon transaction was not independently confirmed.'
+        ? 'The included cryptographic layers are consistent, but the Base transaction was not independently confirmed.'
         : 'At least one required cryptographic layer failed.'
     const layer = (label, value, absent = 'Not included') => `<div class="verification-layer"><strong>${escapeHtml(label)}</strong><span>${value === null ? escapeHtml(absent) : value ? '✓ Valid' : '✕ Failed'}</span></div>`
     const serverLayer = result.server.unavailable
       ? layer('OD trusted verification', null, 'Unavailable')
       : layer('OD trusted verification', result.server.valid)
     const polygonLayer = result.anchorPresent
-      ? layer('Polygon transaction', result.server.unavailable || result.server.polygon_anchor === null ? null : result.server.polygon_anchor, 'Not independently checked')
-      : layer('Polygon transaction', null, 'Pending anchor')
+      ? layer('Base transaction', result.server.unavailable || result.server.polygon_anchor === null ? null : result.server.polygon_anchor, 'Not independently checked')
+      : layer('Base transaction', null, 'Pending anchor')
     const receipt = result.receipt || {}
-    target.innerHTML = `<div class="verification-status ${statusClass}"><strong>${status}</strong><p>${summary}</p></div>${layer('Receipt signature', result.receiptOk)}${layer('Signed event binding', result.eventBindingOk)}${layer('Hash-chain event', result.chainOk)}${layer('Manifest binding', result.manifestOk)}${layer('Content commitment', result.capsuleOk)}${layer('Capsule content hash', result.capsuleContentOk)}${layer('Original comparison', result.contentOk)}${layer('Merkle membership', result.merkleOk)}${layer('Anchor state', result.anchorStateOk)}${layer('Polygon reference', result.polygonReferenceOk)}${serverLayer}${polygonLayer}<div class="key-value"><dt>Event</dt><dd>${escapeHtml(receipt.event_id || '—')}</dd><dt>Received</dt><dd>${formatTime(receipt.received_at)}</dd><dt>Anchor</dt><dd>${escapeHtml(receipt.anchor_status || 'unknown')}</dd></div>`
+    target.innerHTML = `<div class="verification-status ${statusClass}"><strong>${status}</strong><p>${summary}</p></div>${layer('Receipt signature', result.receiptOk)}${layer('Signed event binding', result.eventBindingOk)}${layer('Hash-chain event', result.chainOk)}${layer('Manifest binding', result.manifestOk)}${layer('Content commitment', result.capsuleOk)}${layer('Capsule content hash', result.capsuleContentOk)}${layer('Original comparison', result.contentOk)}${layer('Merkle membership', result.merkleOk)}${layer('Anchor state', result.anchorStateOk)}${layer('Base reference', result.polygonReferenceOk)}${serverLayer}${polygonLayer}<div class="key-value"><dt>Event</dt><dd>${escapeHtml(receipt.event_id || '—')}</dd><dt>Received</dt><dd>${formatTime(receipt.received_at)}</dd><dt>Anchor</dt><dd>${escapeHtml(receipt.anchor_status || 'unknown')}</dd></div>`
   }
 
   async function handleVerifyForm(form, target) {
@@ -809,21 +820,21 @@
       const form = $(`#${button.dataset.dialog}`)
       if (form) form.hidden = !form.hidden
     }))
-    $('#logout').addEventListener('click', async () => { await api('/api/logout', { method: 'POST' }); location.replace('/') })
+    $('#logout')?.addEventListener('click', async () => { await api('/api/logout', { method: 'POST' }); location.replace('/') })
 
-    $('#case-form').addEventListener('submit', async (event) => {
+    $('#case-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { await api('/api/h/cases', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); event.currentTarget.reset(); event.currentTarget.hidden = true; await Promise.all([loadCases(), loadDashboard()]); notice('Case created.') } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#event-form').addEventListener('submit', async (event) => {
+    $('#event-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { await submitHumanEvent(event.currentTarget) } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#api-key-form').addEventListener('submit', async (event) => {
+    $('#api-key-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { const result = await api('/api/api-keys', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#api-key-result').hidden = false; $('#api-key-result').textContent = `Copy now — this key is shown once: ${result.api_key}`; event.currentTarget.reset(); event.currentTarget.hidden = true; await loadMachine() } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#source-form').addEventListener('submit', async (event) => {
+    $('#source-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try {
         const idempotencyKey = event.currentTarget.dataset.idempotencyKey || `source-${crypto.randomUUID()}`
@@ -837,22 +848,22 @@
         event.currentTarget.reset(); event.currentTarget.hidden = true; await loadMachine(); notice('Machine source registered.')
       } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#share-form').addEventListener('submit', async (event) => {
+    $('#share-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { const result = await api('/api/shares', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#share-result').hidden = false; $('#share-result').textContent = result.share_url; event.currentTarget.hidden = true; await loadShares() } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#workspace-verify-form').addEventListener('submit', async (event) => {
+    $('#workspace-verify-form')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { await handleVerifyForm(event.currentTarget, $('#workspace-verify-result')) } catch (error) { $('#workspace-verify-result').innerHTML = `<div class="verification-status fail"><strong>VERIFICATION FAILED</strong><p>${escapeHtml(error.message)}</p></div>` } finally { setBusy(event.currentTarget, false) }
     })
-    $('#billing-checkout').addEventListener('submit', async (event) => {
+    $('#billing-checkout')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { const result = await api('/api/billing/checkout', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); location.assign(result.checkout_url) } catch (error) { notice(error.message, 'error'); setBusy(event.currentTarget, false) }
     })
-    $('#billing-portal').addEventListener('click', async () => {
+    $('#billing-portal')?.addEventListener('click', async () => {
       try { const result = await api('/api/billing/portal', { method: 'POST' }); location.assign(result.portal_url) } catch (error) { notice(error.message, 'error') }
     })
-    $('#totp-start').addEventListener('submit', async (event) => {
+    $('#totp-start')?.addEventListener('submit', async (event) => {
       event.preventDefault()
       try {
         const result = await api('/api/security/totp/start', { method: 'POST' })
@@ -864,11 +875,11 @@
         }
       } catch (error) { notice(error.message, 'error') }
     })
-    $('#totp-confirm').addEventListener('submit', async (event) => {
+    $('#totp-confirm')?.addEventListener('submit', async (event) => {
       event.preventDefault(); setBusy(event.currentTarget, true)
       try { const result = await api('/api/security/totp/confirm', { method: 'POST', body: JSON.stringify(formObject(event.currentTarget)) }); $('#recovery-codes').textContent = `Store once: ${result.recovery_codes.join('  ')}`; notice('TOTP enabled.') } catch (error) { notice(error.message, 'error') } finally { setBusy(event.currentTarget, false) }
     })
-    $('#revoke-sessions').addEventListener('click', async () => {
+    $('#revoke-sessions')?.addEventListener('click', async () => {
       try { await api('/api/security/sessions/revoke', { method: 'POST' }); notice('Other sessions revoked. Sign in again on those devices.') } catch (error) { notice(error.message, 'error') }
     })
 
@@ -876,7 +887,7 @@
     if (user.role === 'supplier' && (user.supplier_mode === 'both' || user.supplier_mode === 'H')) loaders.push(loadCases())
     if (user.role === 'supplier' && (user.supplier_mode === 'both' || user.supplier_mode === 'M')) loaders.push(loadMachine())
     if (user.role === 'verifier') loaders.push(loadVerifier())
-    loaders.push(loadShares())
+    if (user.role === 'supplier') loaders.push(loadShares())
     const results = await Promise.allSettled(loaders)
     const failure = results.find((result) => result.status === 'rejected')
     if (failure) notice(failure.reason?.message || 'Some workspace data could not be loaded.', 'error')

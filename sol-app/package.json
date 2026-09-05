@@ -6,7 +6,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/ts-resolver.mjs --test src/*.test.ts",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build",
+    "build:contract": "node ./scripts/build-contract.mjs",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build:contract && pnpm run build",
     "preview": "$npm_execpath run build && vite preview",
     "deploy": "$npm_execpath run build && wrangler deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"

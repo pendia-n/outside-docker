@@ -1,4 +1,4 @@
-# ODAnchor
+# ODAnchor for Base
 
 The contract stores only:
 
@@ -10,4 +10,4 @@ The contract stores only:
 
 It does not store original content, content hashes, metadata, passcodes, encrypted capsules, or ciphertext. The Worker signs and stores receipts; a later anchor job submits the batch commitment.
 
-Deploy with Foundry or another audited EVM deployment tool. Deployment is intentionally separate from application build because it is an irreversible public-chain action.
+Run `pnpm run build:contract` to compile a deployment artifact for Base Sepolia (`84532`) and Base mainnet (`8453`). Both networks use ETH for gas. Deploy with Foundry or another audited EVM deployment tool. Deployment stays separate because it is an irreversible public-chain action.

@@ -8,10 +8,11 @@
   "vars": {
     "ENV": "dev",
     "RECEIPT_KEY_ID": "od-receipt-dev-2026-01",
-    "POLYGON_CHAIN_ID": "80002",
-    "POLYGON_CONFIRMATIONS": "3",
-    "POLYGON_CONTRACT_ADDRESS_DEV": "0xD44DF2AdB26f48838434c7D7aA57c4A1B9C4211D",
-    "POLYGON_CONTRACT_ADDRESS_PROD": ""
+    "BASE_CHAIN_ID_DEV": "84532",
+    "BASE_CHAIN_ID_PROD": "8453",
+    "BASE_CONFIRMATIONS": "3",
+    "BASE_CONTRACT_ADDRESS_DEV": "",
+    "BASE_CONTRACT_ADDRESS_PROD": ""
   },
   "durable_objects": {
     "bindings": [
@@ -28,7 +29,7 @@
     }
   ],
   "triggers": {
-    "crons": ["*/5 * * * *"]
+    "crons": ["17 1 * * *"]
   },
   "d1_databases": [
     {

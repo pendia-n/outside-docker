@@ -24,7 +24,7 @@ test('changing an event id changes the anchor root', async () => {
   assert.notEqual(first.merkleRoot, second.merkleRoot)
 })
 
-test('prepared batch binds manifest, counts, and Polygon configuration in column order', async () => {
+test('prepared batch binds manifest, counts, and chain configuration in column order', async () => {
   class Statement {
     readonly sql: string
     values: unknown[] = []
@@ -75,7 +75,7 @@ test('prepared batch binds manifest, counts, and Polygon configuration in column
   assert.ok(statements.length >= 1)
 })
 
-test('stale submitted batches finalize from the recorded Polygon transaction without rebroadcasting', async () => {
+test('stale submitted batches finalize from the recorded chain transaction without rebroadcasting', async () => {
   class Statement {
     values: unknown[] = []
     constructor(readonly sql: string) {}

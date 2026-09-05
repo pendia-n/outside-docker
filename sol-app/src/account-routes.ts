@@ -97,65 +97,59 @@ function validateRegistration(input: RegistrationInput): ValidRegistration {
   const username = validateUsername(input.username)
   const password = validatePassword(input.password)
   const email = normalizeOptionalGmail(input.email)
-  if (input.role !== 'supplier' && input.role !== 'verifier') {
+  const role = input.role ?? 'supplier'
+  if (role !== 'supplier' && role !== 'verifier') {
     throw new ValidationError('Role must be supplier or verifier', 'invalid_role', 'role')
   }
-  const supplier = input.role === 'supplier'
+  const supplier = role === 'supplier'
   let initialMode: SupplierMode | null = null
   let planCode: SupplierPlanCode | null = null
   if (supplier) {
-    const rawMode = input.initial_mode === 'HM' ? 'both' : input.initial_mode
+    const rawMode = input.initial_mode === undefined ? 'H' : input.initial_mode === 'HM' ? 'both' : input.initial_mode
     if (rawMode !== 'H' && rawMode !== 'M' && rawMode !== 'both') {
       throw new ValidationError('Initial mode must be H, M, or both', 'invalid_mode', 'initial_mode')
     }
-    if (input.plan_code !== 'A' && input.plan_code !== 'B' && input.plan_code !== 'C' && input.plan_code !== 'D') {
+    if (input.plan_code !== undefined && input.plan_code !== 'A' && input.plan_code !== 'B' && input.plan_code !== 'C' && input.plan_code !== 'D') {
       throw new ValidationError('Supplier plan must be A, B, C, or D', 'invalid_plan', 'plan_code')
     }
     initialMode = rawMode
-    planCode = input.plan_code
+    planCode = input.plan_code ?? 'A'
   }
   return {
     username,
     password,
     email,
-    role: input.role,
+    role,
     initialMode,
     planCode,
-    organization: supplier ? requireString(input.organization, 'organization', { max: 200 }) : null,
-    addressLine1: supplier ? requireString(input.address_line1, 'address_line1', { max: 200 }) : null,
+    organization: supplier ? optionalText(input.organization, 'organization', 200) : null,
+    addressLine1: supplier ? optionalText(input.address_line1, 'address_line1', 200) : null,
     addressLine2: supplier ? optionalText(input.address_line2, 'address_line2', 200) : null,
-    city: supplier ? requireString(input.city, 'city', { max: 120 }) : null,
+    city: supplier ? optionalText(input.city, 'city', 120) : null,
     region: supplier ? optionalText(input.region, 'region', 120) : null,
-    postalCode: supplier ? requireString(input.postal_code, 'postal_code', { max: 32 }) : null,
-    country: supplier ? requireString(input.country, 'country', { max: 80 }) : null,
-    scopeId: supplier ? null : requireString(input.scope_id, 'scope_id', { max: 128 }),
+    postalCode: supplier ? optionalText(input.postal_code, 'postal_code', 32) : null,
+    country: supplier ? optionalText(input.country, 'country', 80) : null,
+    scopeId: null,
     autoRenew: input.auto_renew === true || input.auto_renew === 'true',
   }
 }
 
 async function assertRegistrationAvailable(database: D1Database, registration: ValidRegistration, environment: Env['ENV']): Promise<void> {
-  const existing = await database.prepare(`
-    SELECT 1 FROM users WHERE username = ? OR (? IS NOT NULL AND email_normalized = ?) LIMIT 1
-  `).bind(registration.username, registration.email, registration.email).first()
+  const existing = await database.prepare('SELECT 1 FROM users WHERE username = ? LIMIT 1')
+    .bind(registration.username).first()
   const pending = await database.prepare(`
     SELECT 1 FROM pending_registrations
     WHERE environment = ? AND status IN ('pending', 'checkout_created', 'paid')
-      AND (username = ? OR (? IS NOT NULL AND email_normalized = ?)) LIMIT 1
-  `).bind(environment, registration.username, registration.email, registration.email).first()
-  if (existing || pending) throw new AccountError(409, 'identity_unavailable', 'Username or email is already registered')
-  if (registration.role === 'verifier') {
-    const scope = await database.prepare(`
-      SELECT 1 FROM evidence_scopes WHERE id = ? AND status = 'published' LIMIT 1
-    `).bind(registration.scopeId).first()
-    if (!scope) throw new AccountError(404, 'scope_not_found', 'Published evidence scope was not found')
-  }
+      AND username = ? LIMIT 1
+  `).bind(environment, registration.username).first()
+  if (existing || pending) throw new AccountError(409, 'identity_unavailable', 'Username is already registered')
 }
 
 function farFuture(from: Date): string {
   return new Date(Date.UTC(from.getUTCFullYear() + 10, from.getUTCMonth(), from.getUTCDate())).toISOString()
 }
 
-async function createDevelopmentAccount(database: D1Database, registration: ValidRegistration): Promise<{ username: string; role: string }> {
+async function createAccount(database: D1Database, registration: ValidRegistration, environment: Env['ENV']): Promise<{ username: string; role: string }> {
   const userId = newId()
   const now = new Date()
   const createdAt = now.toISOString()
@@ -173,16 +167,16 @@ async function createDevelopmentAccount(database: D1Database, registration: Vali
         postal_code, country, initial_mode, billing_email, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      newId(), userId, registration.organization, registration.addressLine1,
-      registration.addressLine2, registration.city, registration.region,
-      registration.postalCode, registration.country, registration.initialMode,
+      newId(), userId, registration.organization ?? registration.username, registration.addressLine1 ?? '',
+      registration.addressLine2, registration.city ?? '', registration.region,
+      registration.postalCode ?? '', registration.country ?? '', registration.initialMode,
       registration.email, createdAt, createdAt,
     ))
     const limits = await database.prepare(`
       SELECT write_rate_per_minute, records_per_write FROM billing_plans WHERE code = ? LIMIT 1
     `).bind(registration.planCode).first<{ write_rate_per_minute: number; records_per_write: number }>()
     if (!limits) throw new AccountError(500, 'plan_not_configured', 'Supplier plan is not configured')
-    statements.push(database.prepare(`
+    if (environment === 'dev') statements.push(database.prepare(`
       INSERT INTO entitlements (
         id, user_id, kind, scope_id, status, valid_from, valid_until, auto_renew,
         environment, plan_code, payment_status, write_rate_per_minute,
@@ -193,14 +187,6 @@ async function createDevelopmentAccount(database: D1Database, registration: Vali
       newId(), userId, createdAt, farFuture(now), registration.planCode,
       limits.write_rate_per_minute, limits.records_per_write, createdAt, createdAt,
     ))
-  } else {
-    statements.push(database.prepare(`
-      INSERT INTO entitlements (
-        id, user_id, kind, scope_id, status, valid_from, valid_until, auto_renew,
-        environment, plan_code, payment_status, created_at, updated_at
-      ) VALUES (?, ?, 'read_pass', ?, 'active', ?, ?, 0, 'dev', 'VERIFIER_30D',
-                'development_bypass', ?, ?)
-    `).bind(newId(), userId, registration.scopeId, createdAt, new Date(now.valueOf() + 30 * 86_400_000).toISOString(), createdAt, createdAt))
   }
   await database.batch(statements)
   return { username: registration.username, role: registration.role }
@@ -392,10 +378,7 @@ export function createAccountRoutes(): Hono<{ Bindings: Env }> {
     const registration = validateRegistration(await context.req.json<RegistrationInput>())
     const database = requestDatabase(context)
     await assertRegistrationAvailable(database, registration, context.env.ENV)
-    if (context.env.ENV === 'dev') {
-      return context.json({ created: true, ...await createDevelopmentAccount(database, registration) }, 201)
-    }
-    return context.json(await createProductionCheckout(context, registration), 202)
+    return context.json({ created: true, ...await createAccount(database, registration, context.env.ENV) }, 201)
   })
 
   routes.post('/login', async (context) => {
@@ -499,7 +482,7 @@ export function createAccountRoutes(): Hono<{ Bindings: Env }> {
     const actor = await currentSession(context)
     await assertSessionMutation(context, actor)
     if (actor.user.totpEnabled) throw new AccountError(409, 'totp_already_enabled', 'TOTP is already enabled')
-    const enrollment = createTotpEnrollment('Outside Docker', actor.user.username)
+    const enrollment = createTotpEnrollment('Outdock', actor.user.username)
     const envelope = await encryptTotpSecret(
       enrollment.secret,
       requiredConfiguration(context.env, 'TOTP_ENCRYPTION_KEY'),

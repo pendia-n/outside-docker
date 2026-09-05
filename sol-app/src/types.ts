@@ -40,12 +40,13 @@ export interface Env {
   STRIPE_PRICE_PLAN_D?: string
   STRIPE_PRICE_READ_PASS?: string
 
-  POLYGON_RPC_URL?: string
-  POLYGON_PRIVATE_KEY?: string
-  POLYGON_CONTRACT_ADDRESS_DEV: string
-  POLYGON_CONTRACT_ADDRESS_PROD: string
-  POLYGON_CHAIN_ID: string
-  POLYGON_CONFIRMATIONS?: string
+  BASE_RPC_URL?: string
+  BASE_PRIVATE_KEY?: string
+  BASE_CONTRACT_ADDRESS_DEV: string
+  BASE_CONTRACT_ADDRESS_PROD: string
+  BASE_CHAIN_ID_DEV: string
+  BASE_CHAIN_ID_PROD: string
+  BASE_CONFIRMATIONS?: string
 }
 
 export interface ApiFailure {

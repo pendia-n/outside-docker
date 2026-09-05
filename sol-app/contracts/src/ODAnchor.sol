@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title Outside Docker Anchor
+/// @title Outdock Anchor
 /// @notice Stores only batch commitments. No plaintext payloads or ciphertexts are stored on-chain.
 contract ODAnchor {
     error NotOwner();

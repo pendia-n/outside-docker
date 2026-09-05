@@ -34,7 +34,7 @@ function escapePdfText(value: string): string {
 
 function proofLines(proof: PortableProofV1, options: ProofPdfOptions): string[] {
   const lines: string[] = [
-    printable(options.title ?? 'Outside Docker Portable Proof'),
+    printable(options.title ?? 'Outdock Portable Proof'),
     '',
     ...wrap('Artifact version', `${proof.format}/${proof.version}`),
     ...wrap('Environment', proof.environment.toUpperCase()),
@@ -67,14 +67,14 @@ function proofLines(proof: PortableProofV1, options: ProofPdfOptions): string[] 
       ...wrap('Merkle root', proof.anchor.merkle_root),
       ...wrap('Anchor manifest hash', proof.anchor.manifest_hash),
       ...wrap('Leaf index', proof.anchor.leaf_index),
-      ...wrap('Polygon network / chain', `${proof.anchor.network ?? 'Polygon'} / ${proof.anchor.chain_id}`),
+      ...wrap('Base network / chain', `${proof.anchor.network ?? 'Base'} / ${proof.anchor.chain_id}`),
       ...wrap('Contract', proof.anchor.contract_address),
       ...wrap('Transaction', proof.anchor.transaction_hash),
       ...wrap('Block', proof.anchor.block_number),
       ...wrap('Confirmed at', proof.anchor.confirmed_at),
     )
   } else {
-    lines.push('No confirmed Polygon anchor is attached to this artifact.')
+    lines.push('No confirmed Base anchor is attached to this artifact.')
   }
   if (options.verification) {
     lines.push(
@@ -84,7 +84,7 @@ function proofLines(proof: PortableProofV1, options: ProofPdfOptions): string[] 
       ...wrap('Receipt signature', options.verification.receipt_signature ? 'valid' : 'invalid'),
       ...wrap('Event-chain proof', options.verification.event_chain_proof ? 'valid' : 'invalid'),
       ...wrap('Merkle inclusion', options.verification.merkle_inclusion == null ? 'not anchored' : options.verification.merkle_inclusion ? 'valid' : 'invalid'),
-      ...wrap('Polygon anchor', options.verification.polygon_anchor == null ? 'not checked' : options.verification.polygon_anchor ? 'valid' : 'invalid'),
+      ...wrap('Base anchor', options.verification.polygon_anchor == null ? 'not checked' : options.verification.polygon_anchor ? 'valid' : 'invalid'),
       ...wrap('Failures', options.verification.failures.join(', ') || 'none'),
     )
   }
@@ -97,7 +97,7 @@ export function createProofPdf(proof: PortableProofV1, options: ProofPdfOptions 
   const lines = proofLines(proof, options)
   const pages: string[][] = []
   for (let index = 0; index < lines.length; index += 52) pages.push(lines.slice(index, index + 52))
-  if (pages.length === 0) pages.push(['Outside Docker Portable Proof'])
+  if (pages.length === 0) pages.push(['Outdock Portable Proof'])
 
   const pageObjectIds = pages.map((_, index) => 3 + index * 2)
   const contentObjectIds = pages.map((_, index) => 4 + index * 2)

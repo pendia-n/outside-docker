@@ -1,0 +1,675 @@
+{
+  "contractName": "ODAnchor",
+  "sourceName": "ODAnchor.sol",
+  "compilerVersion": "0.8.36+commit.8a079791.Emscripten.clang",
+  "targetNetworks": [
+    {
+      "name": "base-sepolia",
+      "chainId": 84532,
+      "currency": "ETH"
+    },
+    {
+      "name": "base",
+      "chainId": 8453,
+      "currency": "ETH"
+    }
+  ],
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "initialOwner",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "BatchAlreadyAnchored",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "PendingOwnerOnly",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroValue",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "anchoredAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "AnchorBatch",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "pendingOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        }
+      ],
+      "name": "anchorBatch",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "anchorIdByBatch",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "anchors",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "anchoredAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nextAnchorId",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "verify",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x6080604052348015600e575f5ffd5b50604051610740380380610740833981016040819052602b916074565b6001600160a01b038116605157604051637c946ed760e01b815260040160405180910390fd5b5f80546001600160a01b0319166001600160a01b0392909216919091179055609f565b5f602082840312156083575f5ffd5b81516001600160a01b03811681146098575f5ffd5b9392505050565b610694806100ac5f395ff3fe608060405234801561000f575f5ffd5b5060043610610090575f3560e01c8063aa97825711610063578063aa9782571461017c578063aee885bc1461019f578063bc69b920146101a8578063e30c3978146101c7578063f2fde38b146101da575f5ffd5b8063368b733e146100945780634e0758ff1461012757806379ba5097146101485780638da5cb5b14610152575b5f5ffd5b6100e56100a2366004610570565b60036020525f908152604090208054600182015460029092015490919067ffffffffffffffff81169063ffffffff600160401b8204811691600160601b90041685565b60408051958652602086019490945267ffffffffffffffff9092169284019290925263ffffffff918216606084015216608082015260a0015b60405180910390f35b61013a61013536600461059f565b6101ed565b60405190815260200161011e565b6101506103b2565b005b5f54610164906001600160a01b031681565b6040516001600160a01b03909116815260200161011e565b61018f61018a3660046105eb565b610433565b604051901515815260200161011e565b61013a60025481565b61013a6101b6366004610570565b60046020525f908152604090205481565b600154610164906001600160a01b031681565b6101506101e8366004610614565b6104cf565b5f80546001600160a01b03163314610218576040516330cd747160e01b815260040160405180910390fd5b851580610223575084155b8061022c575083155b1561024a57604051637c946ed760e01b815260040160405180910390fd5b5f8681526004602052604090205415610276576040516303c6075160e51b815260040160405180910390fd5b60025f81546102849061063a565b91829055506040805160a081018252878152602080820188815267ffffffffffffffff4281811685870190815263ffffffff808c16606088019081528b8216608089019081525f8b8152600389528a812099518a55965160018a0155925160029098018054915193518316600160601b0263ffffffff60601b1994909316600160401b026bffffffffffffffffffffffff19909216989095169790971796909617169490941790558a815260049091528290208390559051919250908690889084907f02eceffbdcaec5a68a57c3951f00b6b94855c6e9b609a5c29aded9ca4e4c5336906103a0908a908a908a90899093845263ffffffff92831660208501529116604083015267ffffffffffffffff16606082015260800190565b60405180910390a45095945050505050565b6001546001600160a01b031633146103dd5760405163306bd3d760e01b815260040160405180910390fd5b5f8054336001600160a01b0319808316821784556001805490911690556040516001600160a01b0390921692909183917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a350565b5f831580610442575060025484115b1561044e57505f6104c8565b5f84815260036020908152604091829020825160a081018452815480825260018301549382019390935260029091015467ffffffffffffffff81169382019390935263ffffffff600160401b840481166060830152600160601b9093049092166080830152841480156104c45750828160200151145b9150505b9392505050565b5f546001600160a01b031633146104f9576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b03811661052057604051637c946ed760e01b815260040160405180910390fd5b600180546001600160a01b0319166001600160a01b038381169182179092555f8054604051929316917f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227009190a350565b5f60208284031215610580575f5ffd5b5035919050565b803563ffffffff8116811461059a575f5ffd5b919050565b5f5f5f5f5f60a086880312156105b3575f5ffd5b8535945060208601359350604086013592506105d160608701610587565b91506105df60808701610587565b90509295509295909350565b5f5f5f606084860312156105fd575f5ffd5b505081359360208301359350604090920135919050565b5f60208284031215610624575f5ffd5b81356001600160a01b03811681146104c8575f5ffd5b5f6001820161065757634e487b7160e01b5f52601160045260245ffd5b506001019056fea26469706673582212207f53e165baad1a814b1e0c66dc453c8ddcd6a5aab7d5e8cb854f71b3226ad9eb64736f6c63430008240033",
+  "deployedBytecode": "0x608060405234801561000f575f5ffd5b5060043610610090575f3560e01c8063aa97825711610063578063aa9782571461017c578063aee885bc1461019f578063bc69b920146101a8578063e30c3978146101c7578063f2fde38b146101da575f5ffd5b8063368b733e146100945780634e0758ff1461012757806379ba5097146101485780638da5cb5b14610152575b5f5ffd5b6100e56100a2366004610570565b60036020525f908152604090208054600182015460029092015490919067ffffffffffffffff81169063ffffffff600160401b8204811691600160601b90041685565b60408051958652602086019490945267ffffffffffffffff9092169284019290925263ffffffff918216606084015216608082015260a0015b60405180910390f35b61013a61013536600461059f565b6101ed565b60405190815260200161011e565b6101506103b2565b005b5f54610164906001600160a01b031681565b6040516001600160a01b03909116815260200161011e565b61018f61018a3660046105eb565b610433565b604051901515815260200161011e565b61013a60025481565b61013a6101b6366004610570565b60046020525f908152604090205481565b600154610164906001600160a01b031681565b6101506101e8366004610614565b6104cf565b5f80546001600160a01b03163314610218576040516330cd747160e01b815260040160405180910390fd5b851580610223575084155b8061022c575083155b1561024a57604051637c946ed760e01b815260040160405180910390fd5b5f8681526004602052604090205415610276576040516303c6075160e51b815260040160405180910390fd5b60025f81546102849061063a565b91829055506040805160a081018252878152602080820188815267ffffffffffffffff4281811685870190815263ffffffff808c16606088019081528b8216608089019081525f8b8152600389528a812099518a55965160018a0155925160029098018054915193518316600160601b0263ffffffff60601b1994909316600160401b026bffffffffffffffffffffffff19909216989095169790971796909617169490941790558a815260049091528290208390559051919250908690889084907f02eceffbdcaec5a68a57c3951f00b6b94855c6e9b609a5c29aded9ca4e4c5336906103a0908a908a908a90899093845263ffffffff92831660208501529116604083015267ffffffffffffffff16606082015260800190565b60405180910390a45095945050505050565b6001546001600160a01b031633146103dd5760405163306bd3d760e01b815260040160405180910390fd5b5f8054336001600160a01b0319808316821784556001805490911690556040516001600160a01b0390921692909183917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a350565b5f831580610442575060025484115b1561044e57505f6104c8565b5f84815260036020908152604091829020825160a081018452815480825260018301549382019390935260029091015467ffffffffffffffff81169382019390935263ffffffff600160401b840481166060830152600160601b9093049092166080830152841480156104c45750828160200151145b9150505b9392505050565b5f546001600160a01b031633146104f9576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b03811661052057604051637c946ed760e01b815260040160405180910390fd5b600180546001600160a01b0319166001600160a01b038381169182179092555f8054604051929316917f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227009190a350565b5f60208284031215610580575f5ffd5b5035919050565b803563ffffffff8116811461059a575f5ffd5b919050565b5f5f5f5f5f60a086880312156105b3575f5ffd5b8535945060208601359350604086013592506105d160608701610587565b91506105df60808701610587565b90509295509295909350565b5f5f5f606084860312156105fd575f5ffd5b505081359360208301359350604090920135919050565b5f60208284031215610624575f5ffd5b81356001600160a01b03811681146104c8575f5ffd5b5f6001820161065757634e487b7160e01b5f52601160045260245ffd5b506001019056fea26469706673582212207f53e165baad1a814b1e0c66dc453c8ddcd6a5aab7d5e8cb854f71b3226ad9eb64736f6c63430008240033",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.36+commit.8a079791"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "initialOwner",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "BatchAlreadyAnchored",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "NotOwner",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "PendingOwnerOnly",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            }
+          ],
+          "name": "AnchorBatch",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "pendingOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferStarted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "acceptOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            }
+          ],
+          "name": "anchorBatch",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "anchorIdByBatch",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "anchors",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "nextAnchorId",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "verify",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {},
+        "title": "Outdock Anchor",
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {},
+        "notice": "Stores only batch commitments. No plaintext payloads or ciphertexts are stored on-chain.",
+        "version": 1
+      }
+    },
+    "settings": {
+      "compilationTarget": {
+        "ODAnchor.sol": "ODAnchor"
+      },
+      "evmVersion": "osaka",
+      "libraries": {},
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "remappings": []
+    },
+    "sources": {
+      "ODAnchor.sol": {
+        "keccak256": "0x885118a8882e74e2e9b549198e3b389c9442642e5e51988d707924d123719950",
+        "license": "MIT",
+        "urls": [
+          "bzz-raw://0f8297da5c541865dc6c6266d4e1855fd5c2b6c858180b4525f2d80f7a45bce7",
+          "dweb:/ipfs/QmNTSvDZRqKRBciDXL6JUe2zRtdndxxfKuQrmkLdiwKQx5"
+        ]
+      }
+    },
+    "version": 1
+  }
+}

@@ -263,8 +263,8 @@ export class PolygonAnchorService {
         await this.requeueInterrupted(
           batch,
           transaction.state === 'failed'
-            ? 'Polygon transaction failed before confirmation'
-            : 'Polygon transaction is no longer available',
+            ? 'Base transaction failed before confirmation'
+            : 'Base transaction is no longer available',
         )
       }
       recovered += 1
@@ -353,7 +353,7 @@ export class PolygonAnchorService {
         leafCount: batch.leaf_count,
         eventCount: batch.event_count,
       })
-      if (!/^0x[a-fA-F0-9]{64}$/.test(transaction.hash)) throw new Error('Polygon client returned an invalid transaction hash')
+      if (!/^0x[a-fA-F0-9]{64}$/.test(transaction.hash)) throw new Error('Base client returned an invalid transaction hash')
       await this.database.prepare(
         "UPDATE anchor_batches SET tx_hash = ?, updated_at = ? WHERE id = ? AND status = 'submitted'",
       ).bind(transaction.hash, this.now().toISOString(), batch.id).run()
@@ -361,7 +361,7 @@ export class PolygonAnchorService {
         'UPDATE anchor_attempts SET tx_hash = ? WHERE id = ?',
       ).bind(transaction.hash, attemptId).run()
       const receipt = await transaction.wait(this.confirmations)
-      if (!receipt || (receipt.status != null && Number(receipt.status) !== 1)) throw new Error('Polygon transaction was not confirmed successfully')
+      if (!receipt || (receipt.status != null && Number(receipt.status) !== 1)) throw new Error('Base transaction was not confirmed successfully')
       const confirmedAt = this.now().toISOString()
       const statements = [
         this.database.prepare(`

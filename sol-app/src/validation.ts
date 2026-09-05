@@ -20,7 +20,7 @@ export class ValidationError extends Error {
 }
 
 export const USERNAME_PATTERN = /^[a-z0-9_-]{3,32}$/
-export const GMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/
+export const RECOVERY_EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(gmail|hotmail)\.com$/
 export const HEX_256_PATTERN = /^[0-9a-f]{64}$/
 
 export function normalizeUsername(value: string): string {
@@ -45,11 +45,9 @@ export function inspectPassword(value: unknown): PasswordValidationResult {
   const issues: string[] = []
   if (typeof value !== 'string') return { valid: false, issues: ['required'] }
   if (value.length < 7) issues.push('minimum_length')
-  if (value.length > 1024) issues.push('maximum_length')
-  if (!/[A-Z]/.test(value)) issues.push('uppercase')
-  if (!/[a-z]/.test(value)) issues.push('lowercase')
+  if (value.length > 18) issues.push('maximum_length')
+  if (!/[A-Za-z]/.test(value)) issues.push('letter')
   if (!/\d/.test(value)) issues.push('digit')
-  if (!/[^A-Za-z\d]/.test(value)) issues.push('symbol')
   return { valid: issues.length === 0, issues }
 }
 
@@ -57,7 +55,7 @@ export function validatePassword(value: unknown): string {
   const inspected = inspectPassword(value)
   if (!inspected.valid) {
     throw new ValidationError(
-      'Password requires 7-1024 characters including upper, lower, digit, and symbol',
+      'Password requires 7-18 characters including at least one letter and one digit',
       'weak_password',
       'password',
     )
@@ -69,8 +67,8 @@ export function normalizeOptionalGmail(value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null
   if (typeof value !== 'string') throw new ValidationError('Email must be a string', 'invalid_email', 'email')
   const normalized = value.trim().toLowerCase()
-  if (normalized.length > 254 || !GMAIL_PATTERN.test(normalized)) {
-    throw new ValidationError('Phase 1 accepts Gmail addresses only', 'invalid_email', 'email')
+  if (normalized.length > 254 || !RECOVERY_EMAIL_PATTERN.test(normalized)) {
+    throw new ValidationError('Recovery email must use Gmail or Hotmail', 'invalid_email', 'email')
   }
   return normalized
 }
