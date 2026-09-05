@@ -203,11 +203,18 @@ export function createAccessRoutes(dependencies: {
         AND COALESCE(e.occurred_at, e.received_at) >= ? AND COALESCE(e.occurred_at, e.received_at) < ?
       ORDER BY COALESCE(e.occurred_at, e.received_at), e.position, e.id
     `).bind(grant.supplier_user_id, grant.event_type_id, grant.data_from, effectiveEnd).all<Record<string, unknown>>()
-    await database.prepare(`INSERT INTO evidence_access_logs (id, access_grant_id, verifier_user_id, action, outcome, occurred_at) VALUES (?, ?, ?, 'list', 'allowed', ?)`)
-      .bind(crypto.randomUUID(), grant.id, authenticated.userId, now).run()
+    const viewSessionId = crypto.randomUUID()
+    const watermarkRef = `OUTDOCK-${authenticated.username}-${viewSessionId.slice(0, 8)}`
+    const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString()
+    await database.batch([
+      database.prepare(`INSERT INTO evidence_view_sessions (id, access_grant_id, verifier_user_id, session_id, watermark_ref, started_at, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(viewSessionId, grant.id, authenticated.userId, authenticated.sessionId, watermarkRef, now, expiresAt, now),
+      database.prepare(`INSERT INTO evidence_access_logs (id, access_grant_id, view_session_id, verifier_user_id, action, outcome, occurred_at) VALUES (?, ?, ?, ?, 'list', 'allowed', ?)`)
+        .bind(crypto.randomUUID(), grant.id, viewSessionId, authenticated.userId, now),
+    ])
     context.header('Cache-Control', 'no-store')
     context.header('Content-Disposition', 'inline')
-    return context.json({ grant, events: events.results, download_allowed: false })
+    return context.json({ grant, events: events.results, download_allowed: false, watermark: watermarkRef, view_expires_at: expiresAt })
   })
 
   return routes

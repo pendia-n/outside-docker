@@ -29,7 +29,7 @@ This file tracks the accepted product direction against verified code. A checked
 - [x] Never retain original content by default for text, PDF, image, MP3, MP4, or other files.
 - [ ] Provide optional encrypted object storage: first 100 MB free, then $10 per additional 100 MB after billing cadence is confirmed.
 - [x] Add Supplier invitations and Verifier organization/team membership foundations.
-- [ ] Restrict ordinary Verifier access to Web review with access logs and no proof/data download (per-view watermark rendering remains pending).
+- [x] Restrict ordinary Verifier access to Web review with expiring per-view watermarks, access logs, and no proof/data download.
 - [ ] Keep an explicitly authorized, audited legal/court export path separate from ordinary access.
 
 ## Verifier billing

@@ -559,7 +559,7 @@
     $('#verifier-grant-list').innerHTML = grants.length ? grants.map((grant) => `<button class="record-card" data-access-grant="${escapeHtml(grant.id)}" ${grant.status !== 'active' ? 'disabled' : ''}><strong>${escapeHtml(grant.event_type_name)}</strong><span>${escapeHtml(grant.supplier_username)} · ${escapeHtml(grant.status)} · ${formatTime(grant.data_from)} to ${formatTime(grant.data_until)}</span></button>`).join('') : '<div class="empty-state">No purchased access yet.</div>'
     $$('[data-access-grant]').forEach((button) => button.addEventListener('click', async () => {
       const detail = await api(`/api/verifier/grants/${encodeURIComponent(button.dataset.accessGrant)}/events`)
-      $('#verifier-grant-detail').innerHTML = renderTimeline(detail?.events)
+      $('#verifier-grant-detail').innerHTML = `<div class="evidence-watermark">${escapeHtml(detail.watermark)} · view expires ${formatTime(detail.view_expires_at)}</div>${renderTimeline(detail?.events)}`
     }))
   }
 

@@ -198,6 +198,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--terracotta); box
 .surface h2 { margin: 0 0 15px; font-size: 19px; letter-spacing: -0.035em; }
 .surface-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
 .surface-title h2 { margin: 0; }
+.subsection-title { margin-top: 28px !important; padding-top: 22px; border-top: 1px solid var(--line); }
+.evidence-watermark { position: sticky; top: 12px; z-index: 2; margin: 0 0 14px; padding: 8px 12px; border: 1px dashed var(--terracotta); border-radius: 8px; background: rgba(255, 253, 248, 0.94); color: var(--terracotta-deep); font: 11px ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.05em; text-align: center; }
 .app-wide { margin-top: 20px; }
 .compact-form { margin: 14px 0 20px; padding: 15px; border: 1px dashed var(--line); border-radius: 12px; background: #fbf8f1; }
 .compact-form fieldset { border: 0; padding: 0; margin: 12px 0; }
