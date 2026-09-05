@@ -61,6 +61,9 @@ export interface MachineRecordInput {
   record_salt?: string
   json?: unknown
   text?: string
+  content_base64?: string
+  content_name?: string | null
+  content_type?: string | null
   params?: unknown
   metadata?: unknown
   source_key_id?: string | null
@@ -82,7 +85,8 @@ const SOURCE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 const ACTION = /^[A-Z0-9][A-Z0-9_.:-]{0,95}$/
 const DIGEST = /^[a-f0-9]{64}$/
 const ALLOWED_SCOPES = new Set<MachineScope>(['source:write', 'record:write', 'record:batch', 'receipt:read', 'usage:read'])
-const FORBIDDEN_INPUT_KEYS = new Set(['encrypted_capsule', 'passcode', 'file', 'file_path', 'local_path', 'url', 'remote_url', 'content_base64'])
+const FORBIDDEN_INPUT_KEYS = new Set(['encrypted_capsule', 'passcode', 'file', 'file_path', 'local_path', 'url', 'remote_url'])
+const MAX_EPHEMERAL_CONTENT_BYTES = 10 * 1024 * 1024
 
 function normalizedDigest(value: string, field: string): string {
   const digest = value?.toLowerCase().replace(/^sha256:/, '').replace(/^0x/, '')
@@ -119,21 +123,58 @@ function withoutUndefined(value: Record<string, unknown>): Record<string, unknow
   return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined))
 }
 
-export async function deriveMachineCommitment(input: Pick<MachineRecordInput, 'commitment' | 'content_hash' | 'record_salt' | 'json' | 'text'>): Promise<string> {
+function decodeEphemeralBase64(value: string): Uint8Array {
+  if (typeof value !== 'string' || value.length === 0 || value.length > Math.ceil(MAX_EPHEMERAL_CONTENT_BYTES / 3) * 4 + 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new DomainError(400, 'invalid_content_base64', 'content_base64 must be standard padded base64 up to 10 MiB decoded')
+  }
+  let binary: string
+  try { binary = atob(value) }
+  catch { throw new DomainError(400, 'invalid_content_base64', 'content_base64 is invalid') }
+  if (binary.length > MAX_EPHEMERAL_CONTENT_BYTES) throw new DomainError(413, 'content_too_large', 'Ephemeral file content is limited to 10 MiB per record')
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+}
+
+export interface MachineEvidenceMaterial {
+  contentHash: string | null
+  contentKind: 'commitment' | 'hash' | 'json' | 'text' | 'file'
+  contentLength: number | null
+  commitment: string
+}
+
+export async function deriveMachineEvidence(input: Pick<MachineRecordInput, 'commitment' | 'content_hash' | 'record_salt' | 'json' | 'text' | 'content_base64'>): Promise<MachineEvidenceMaterial> {
   const hasCommitment = input.commitment != null
-  const contentOptions = Number(input.content_hash != null) + Number(input.json !== undefined) + Number(input.text !== undefined)
+  const contentOptions = Number(input.content_hash != null) + Number(input.json !== undefined) + Number(input.text !== undefined) + Number(input.content_base64 !== undefined)
   if (hasCommitment) {
     if (contentOptions > 0 || input.record_salt != null) {
       throw new DomainError(400, 'ambiguous_content', 'Send commitment alone, or send one content form with record_salt')
     }
-    return normalizedDigest(input.commitment!, 'commitment')
+    return { contentHash: null, contentKind: 'commitment', contentLength: null, commitment: normalizedDigest(input.commitment!, 'commitment') }
   }
-  if (contentOptions !== 1) throw new DomainError(400, 'invalid_content', 'Exactly one of content_hash, json, or text is required when commitment is absent')
+  if (contentOptions !== 1) throw new DomainError(400, 'invalid_content', 'Exactly one of content_hash, json, text, or content_base64 is required when commitment is absent')
   const salt = normalizedDigest(input.record_salt ?? '', 'record_salt')
   let contentHash: string
-  if (input.content_hash != null) contentHash = normalizedDigest(input.content_hash, 'content_hash')
-  else if (input.json !== undefined) contentHash = await canonicalSha256(input.json)
-  else contentHash = await sha256Bytes(input.text!)
+  let contentKind: MachineEvidenceMaterial['contentKind']
+  let contentLength: number | null
+  if (input.content_hash != null) {
+    contentHash = normalizedDigest(input.content_hash, 'content_hash')
+    contentKind = 'hash'
+    contentLength = null
+  } else if (input.json !== undefined) {
+    const canonical = canonicalize(input.json)
+    contentHash = await sha256Bytes(canonical)
+    contentKind = 'json'
+    contentLength = new TextEncoder().encode(canonical).byteLength
+  } else if (input.text !== undefined) {
+    const bytes = new TextEncoder().encode(input.text)
+    contentHash = await sha256Bytes(bytes)
+    contentKind = 'text'
+    contentLength = bytes.byteLength
+  } else {
+    const bytes = decodeEphemeralBase64(input.content_base64!)
+    contentHash = await sha256Bytes(bytes)
+    contentKind = 'file'
+    contentLength = bytes.byteLength
+  }
   // C = SHA-256(UTF8("OD1|CONTENT|") || raw 32-byte salt || raw 32-byte H).
   // H and salt are deliberately discarded after this transient calculation.
   const domain = new TextEncoder().encode('OD1|CONTENT|')
@@ -141,7 +182,11 @@ export async function deriveMachineCommitment(input: Pick<MachineRecordInput, 'c
   bytes.set(domain, 0)
   bytes.set(hexBytes(salt), domain.length)
   bytes.set(hexBytes(contentHash), domain.length + 32)
-  return sha256Bytes(bytes)
+  return { contentHash, contentKind, contentLength, commitment: await sha256Bytes(bytes) }
+}
+
+export async function deriveMachineCommitment(input: Pick<MachineRecordInput, 'commitment' | 'content_hash' | 'record_salt' | 'json' | 'text' | 'content_base64'>): Promise<string> {
+  return (await deriveMachineEvidence(input)).commitment
 }
 
 export async function machineRequestHash(input: MachineRecordInput): Promise<string> {
@@ -149,20 +194,31 @@ export async function machineRequestHash(input: MachineRecordInput): Promise<str
   return canonicalSha256(input)
 }
 
-export async function machineManifestHash(input: MachineRecordInput, commitment: string): Promise<string> {
-  return canonicalSha256(withoutUndefined({
+export function machineManifest(input: MachineRecordInput, material: MachineEvidenceMaterial, supplierUsername?: string): Record<string, unknown> {
+  return withoutUndefined({
     version: 'OD-MANIFEST-1',
+    supplier_username: supplierUsername,
+    track: 'M',
     source_id: input.source_id,
     delivery_id: input.delivery_id ?? null,
     action: input.action,
     occurred_at: new Date(input.occurred_at).toISOString(),
     sequence: input.sequence ?? null,
-    commitment,
+    content_kind: material.contentKind,
+    content_length: material.contentLength,
+    content_name: input.content_name ?? null,
+    content_type: input.content_type ?? null,
+    content_hash: material.contentHash,
+    commitment: material.commitment,
     params: input.params ?? null,
     metadata: input.metadata ?? null,
     source_key_id: input.source_key_id ?? null,
     source_signature: input.source_signature ?? null,
-  }))
+  })
+}
+
+export async function machineManifestHash(input: MachineRecordInput, commitment: string): Promise<string> {
+  return canonicalSha256(machineManifest(input, { contentHash: null, contentKind: 'commitment', contentLength: null, commitment }))
 }
 
 function monthWindow(now: Date): { start: string; end: string } {
@@ -522,14 +578,18 @@ export class TrackMService {
     const occurred = new Date(input.occurred_at)
     if (!Number.isFinite(occurred.valueOf())) throw new DomainError(400, 'invalid_occurred_at', 'occurred_at must be an ISO-8601 timestamp')
     if (input.sequence != null && (!Number.isSafeInteger(input.sequence) || input.sequence < 0)) throw new DomainError(400, 'invalid_sequence', 'sequence must be a non-negative safe integer')
-    const commitment = await deriveMachineCommitment(input)
-    const manifestHash = await machineManifestHash({ ...input, action, occurred_at: occurred.toISOString() }, commitment)
-    return this.appender.append({
+    const normalizedInput = { ...input, action, occurred_at: occurred.toISOString() }
+    const material = await deriveMachineEvidence(normalizedInput)
+    const identity = await this.database.prepare('SELECT username FROM users WHERE id = ? LIMIT 1').bind(credential.ownerId).first<{ username: string }>()
+    if (!identity) throw new DomainError(401, 'invalid_api_key', 'Supplier account is unavailable')
+    const manifest = machineManifest(normalizedInput, material, identity.username)
+    const manifestHash = await canonicalSha256(manifest)
+    const result = await this.appender.append({
       ownerId: credential.ownerId,
       track: 'M',
       externalRef: source.external_ref,
       eventType: action,
-      commitment,
+      commitment: material.commitment,
       manifestHash,
       occurredAt: occurred.toISOString(),
       sourceId: source.id,
@@ -543,6 +603,13 @@ export class TrackMService {
       idempotencyKey: input.idempotency_key,
       requestHash,
     })
+    return {
+      ...result,
+      content_hash: material.contentHash,
+      commitment: material.commitment,
+      manifest,
+      manifest_hash: manifestHash,
+    } as ChainAppendResult
   }
 
   async appendBatch(credential: MachineCredential, inputs: MachineRecordInput[], batchKey: string): Promise<ChainAppendResult[]> {

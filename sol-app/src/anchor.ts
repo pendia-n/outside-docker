@@ -166,9 +166,38 @@ export class PolygonAnchorService {
       WHERE anchor_status = 'pending_anchor' AND anchor_batch_id IS NULL
       ORDER BY received_at ASC, id ASC LIMIT ?
     `).bind(this.batchSize).all<PendingAnchorEvent>()
-    if (pending.results.length === 0) return null
+    return this.persistPreparedBatch(pending.results)
+  }
 
-    const material = await buildAnchorMaterial(pending.results)
+  async preparePriorityBatch(): Promise<AnchorBatchRow | null> {
+    const request = await this.database.prepare(`
+      SELECT id, supplier_user_id, event_type_ref, range_start, range_end
+      FROM priority_anchor_requests
+      WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1
+    `).first<{ id: string; supplier_user_id: string; event_type_ref: string; range_start: string; range_end: string }>()
+    if (!request) return null
+    const pending = await this.database.prepare(`
+      SELECT id, proof, received_at FROM events
+      WHERE owner_id = ? AND event_type = ?
+        AND COALESCE(occurred_at, received_at) >= ? AND COALESCE(occurred_at, received_at) < ?
+        AND anchor_status = 'pending_anchor' AND anchor_batch_id IS NULL
+      ORDER BY received_at ASC, id ASC LIMIT ?
+    `).bind(request.supplier_user_id, request.event_type_ref.toUpperCase(), request.range_start, request.range_end, this.batchSize).all<PendingAnchorEvent>()
+    if (pending.results.length === 0) {
+      const completedAt = this.now().toISOString()
+      await this.database.prepare(`
+        UPDATE priority_anchor_requests SET status = 'completed', completed_at = ?, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+      `).bind(completedAt, completedAt, request.id).run()
+      return null
+    }
+    return this.persistPreparedBatch(pending.results, request.id)
+  }
+
+  private async persistPreparedBatch(pendingEvents: readonly PendingAnchorEvent[], priorityRequestId?: string): Promise<AnchorBatchRow | null> {
+    if (pendingEvents.length === 0) return null
+
+    const material = await buildAnchorMaterial(pendingEvents)
     const id = crypto.randomUUID()
     const createdAt = this.now().toISOString()
     const statements: D1PreparedStatement[] = [this.database.prepare(`
@@ -184,7 +213,7 @@ export class PolygonAnchorService {
       material.merkleRoot,
       material.manifestHash,
       material.leaves.length,
-      pending.results.length,
+      pendingEvents.length,
       this.configuration.chainId,
       this.configuration.network,
       this.configuration.contractAddress,
@@ -205,6 +234,12 @@ export class PolygonAnchorService {
         "UPDATE receipts SET anchor_status = 'batching', updated_at = ? WHERE event_id = ?",
       ).bind(createdAt, leaf.eventId))
     }
+    if (priorityRequestId) {
+      statements.push(this.database.prepare(`
+        UPDATE priority_anchor_requests SET status = 'batching', anchor_batch_id = ?, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+      `).bind(id, createdAt, priorityRequestId))
+    }
     await this.database.batch(statements)
     return {
       id,
@@ -213,7 +248,7 @@ export class PolygonAnchorService {
       merkle_root: material.merkleRoot,
       manifest_hash: material.manifestHash,
       leaf_count: material.leaves.length,
-      event_count: pending.results.length,
+      event_count: pendingEvents.length,
       attempt_count: 0,
       next_retry_at: null,
       tx_hash: null,
@@ -299,6 +334,10 @@ export class PolygonAnchorService {
         UPDATE receipts SET anchor_status = 'anchored', updated_at = ?
         WHERE event_id IN (SELECT event_id FROM anchor_batch_events WHERE batch_id = ?)
       `).bind(confirmedAt, batch.id),
+      this.database.prepare(`
+        UPDATE priority_anchor_requests SET status = 'completed', completed_at = ?, updated_at = ?
+        WHERE anchor_batch_id = ? AND status = 'batching'
+      `).bind(confirmedAt, confirmedAt, batch.id),
     ])
   }
 
@@ -375,6 +414,10 @@ export class PolygonAnchorService {
           UPDATE receipts SET anchor_status = 'anchored', updated_at = ?
           WHERE event_id IN (SELECT event_id FROM anchor_batch_events WHERE batch_id = ?)
         `).bind(confirmedAt, batch.id),
+        this.database.prepare(`
+          UPDATE priority_anchor_requests SET status = 'completed', completed_at = ?, updated_at = ?
+          WHERE anchor_batch_id = ? AND status = 'batching'
+        `).bind(confirmedAt, confirmedAt, batch.id),
       ]
       await this.database.batch(statements)
       return { ...batch, status: 'confirmed', attempt_count: attempt, tx_hash: transaction.hash }
@@ -405,6 +448,10 @@ export class PolygonAnchorService {
         UPDATE receipts SET anchor_status = 'anchor_failed', updated_at = ?
         WHERE event_id IN (SELECT event_id FROM anchor_batch_events WHERE batch_id = ?)
       `).bind(failedAt.toISOString(), batch.id))
+      statements.push(this.database.prepare(`
+        UPDATE priority_anchor_requests SET status = 'failed', last_error = ?, updated_at = ?
+        WHERE anchor_batch_id = ? AND status = 'batching'
+      `).bind(message, failedAt.toISOString(), batch.id))
     }
     await this.database.batch(statements)
     return { ...batch, status, attempt_count: attempt, next_retry_at: retryAt }
@@ -413,7 +460,8 @@ export class PolygonAnchorService {
   /** Called by a Worker's scheduled handler. */
   async runScheduled(): Promise<{ prepared: string | null; submitted: number; confirmed: number; retrying: number; failed: number }> {
     await this.recoverStaleSubmitted()
-    const prepared = await this.prepareBatch()
+    const priority = await this.preparePriorityBatch()
+    const prepared = priority ?? await this.prepareBatch()
     const due = await this.dueBatches()
     const summary = { prepared: prepared?.id ?? null, submitted: 0, confirmed: 0, retrying: 0, failed: 0 }
     for (const batch of due) {

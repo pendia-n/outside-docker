@@ -12,6 +12,7 @@ import {
   processStripeWebhook,
 } from './billing'
 import { DomainError, createChainDurableObject, durableObjectChainAppender } from './chain-do'
+import { createEventCatalogRoutes } from './event-catalog'
 import { databaseFor } from './db'
 import { ApplicationPage, CheckoutStatusPage, LandingPage, VerifyPage } from './pages'
 import { createProofPdfResponse } from './pdf'
@@ -36,7 +37,7 @@ import {
   createTrackMRoutes,
 } from './track-m'
 import type { Env } from './types'
-import { ValidationError, requirePlainRecord } from './validation'
+import { ValidationError, requirePlainRecord, requireString } from './validation'
 import {
   VerifierService,
   createVerifierRoutes,
@@ -49,7 +50,7 @@ type AppEnvironment = { Bindings: Env; Variables: { requestId: string } }
 type WorkerContext = Context<AppEnvironment>
 
 const app = new Hono<AppEnvironment>()
-const MAX_REQUEST_BYTES = 2_200_000
+const MAX_REQUEST_BYTES = 15_000_000
 
 function requestId(context: WorkerContext): string {
   return context.get('requestId') || crypto.randomUUID()
@@ -181,6 +182,21 @@ app.get('/health', (context) => context.json({
 }))
 
 app.route('/api', createAccountRoutes())
+
+app.route('/api', createEventCatalogRoutes({
+  database: (context) => requestDatabase(context),
+  authenticate: async (context) => {
+    const actor = await sessionFor(context)
+    return actor ? { userId: actor.user.id, role: actor.user.role } : null
+  },
+  authorizeWrite: async (_actor, context) => {
+    const actor = await currentSession(context)
+    await assertSessionMutation(context, actor)
+    if (!activeEntitlement(actor, 'writer_plan')) {
+      throw new AuthorizationError('An active Supplier plan is required', 402, 'active_plan_required')
+    }
+  },
+}))
 
 const chainAppender = (context: WorkerContext) => durableObjectChainAppender(context.env.CHAIN_COORDINATOR)
 
@@ -537,6 +553,48 @@ app.post('/api/billing/checkout', async (context) => {
     checkout_url: await billingPortal(context, 'billing_change'),
     managed_by: 'stripe_billing_portal',
   })
+})
+
+app.get('/api/anchors/priority', async (context) => {
+  const actor = await requireSupplier(context)
+  const requests = await requestDatabase(context).prepare(`
+    SELECT id, event_type_ref, range_start, range_end, status, anchor_batch_id,
+           last_error, created_at, completed_at
+    FROM priority_anchor_requests WHERE supplier_user_id = ?
+    ORDER BY created_at DESC LIMIT 100
+  `).bind(actor.user.id).all<Record<string, unknown>>()
+  return context.json({ requests: requests.results })
+})
+
+app.post('/api/anchors/priority', async (context) => {
+  const actor = await requireSupplier(context)
+  await assertSessionMutation(platformContext(context), actor)
+  if (!actor.entitlements.some((entitlement) => entitlement.kind === 'writer_plan' && entitlement.status === 'active')) {
+    throw new AuthorizationError('An active Supplier plan is required', 402, 'active_plan_required')
+  }
+  const body = requirePlainRecord(await context.req.json(), 'priority anchor request')
+  const eventType = requireString(body.event_type, 'event_type', { max: 96 }).toUpperCase()
+  if (!/^[A-Z0-9][A-Z0-9_.:-]{0,95}$/.test(eventType)) throw new ValidationError('event_type is invalid', 'invalid_event_type', 'event_type')
+  const start = new Date(requireString(body.range_start, 'range_start', { max: 64 }))
+  const end = new Date(requireString(body.range_end, 'range_end', { max: 64 }))
+  if (!Number.isFinite(start.valueOf()) || !Number.isFinite(end.valueOf()) || start >= end) {
+    throw new ValidationError('range_start and range_end must be a valid end-exclusive range', 'invalid_access_range')
+  }
+  const database = requestDatabase(context)
+  const event = await database.prepare(`
+    SELECT 1 FROM events WHERE owner_id = ? AND event_type = ?
+      AND COALESCE(occurred_at, received_at) >= ? AND COALESCE(occurred_at, received_at) < ? LIMIT 1
+  `).bind(actor.user.id, eventType, start.toISOString(), end.toISOString()).first()
+  if (!event) throw new DomainError(404, 'event_range_empty', 'No matching Supplier events exist in this range')
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+  await database.prepare(`
+    INSERT INTO priority_anchor_requests (
+      id, requested_by_user_id, supplier_user_id, event_type_id, event_type_ref,
+      access_order_id, range_start, range_end, status, created_at, updated_at
+    ) VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, 'pending', ?, ?)
+  `).bind(id, actor.user.id, actor.user.id, eventType, start.toISOString(), end.toISOString(), createdAt, createdAt).run()
+  return context.json({ id, event_type: eventType, range_start: start.toISOString(), range_end: end.toISOString(), status: 'pending' }, 202)
 })
 
 app.post('/api/webhooks/stripe', async (context) => {

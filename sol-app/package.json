@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node ./scripts/sanitize-build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/ts-resolver.mjs --test src/*.test.ts",
     "build:contract": "node ./scripts/build-contract.mjs",

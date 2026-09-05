@@ -123,7 +123,7 @@ test('stale submitted batches finalize from the recorded chain transaction witho
 
   assert.equal(await service.recoverStaleSubmitted(), 1)
   assert.equal(broadcasts, 0)
-  assert.equal(batched.length, 4)
+  assert.equal(batched.length, 5)
   assert.match(batched[0].sql, /status = 'confirmed'/)
   assert.match(batched[2].sql, /anchor_status = 'anchored'/)
 })

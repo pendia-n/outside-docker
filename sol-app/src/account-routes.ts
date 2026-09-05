@@ -160,18 +160,23 @@ async function createAccount(database: D1Database, registration: ValidRegistrati
       totp_required, session_version, is_active, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 1, 1, ?, ?)
   `).bind(userId, registration.username, registration.email, registration.email, passwordHash, registration.role, createdAt, createdAt)]
-  if (registration.role === 'supplier') {
-    statements.push(database.prepare(`
+  statements.push(database.prepare(`
       INSERT INTO organizations (
         id, user_id, legal_name, address_line1, address_line2, city, region,
-        postal_code, country, initial_mode, billing_email, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        postal_code, country, initial_mode, billing_email, organization_kind, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newId(), userId, registration.organization ?? registration.username, registration.addressLine1 ?? '',
       registration.addressLine2, registration.city ?? '', registration.region,
       registration.postalCode ?? '', registration.country ?? '', registration.initialMode,
-      registration.email, createdAt, createdAt,
+      registration.email, registration.role, createdAt, createdAt,
     ))
+  statements.push(database.prepare(`
+    INSERT INTO organization_memberships (
+      organization_id, user_id, member_role, status, joined_at, created_at, updated_at
+    ) SELECT id, user_id, 'owner', 'active', ?, ?, ? FROM organizations WHERE user_id = ?
+  `).bind(createdAt, createdAt, createdAt, userId))
+  if (registration.role === 'supplier') {
     const limits = await database.prepare(`
       SELECT write_rate_per_minute, records_per_write FROM billing_plans WHERE code = ? LIMIT 1
     `).bind(registration.planCode).first<{ write_rate_per_minute: number; records_per_write: number }>()

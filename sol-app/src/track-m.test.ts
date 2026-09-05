@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DomainError } from './chain-do'
-import { deriveMachineCommitment, machineManifestHash, machineRequestHash } from './track-m'
+import { deriveMachineCommitment, deriveMachineEvidence, machineManifestHash, machineRequestHash } from './track-m'
 
 const salt = '1'.repeat(64)
 
@@ -23,6 +23,15 @@ test('machine request and manifest hashing are deterministic', async () => {
   }
   assert.equal(await machineRequestHash(input), await machineRequestHash({ ...input }))
   assert.equal(await machineManifestHash(input, input.commitment), await machineManifestHash({ ...input }, input.commitment))
+})
+
+test('ephemeral local-file bytes return H and C without retaining a path or URL', async () => {
+  const bytes = Buffer.from('%PDF local test fixture', 'utf8')
+  const material = await deriveMachineEvidence({ content_base64: bytes.toString('base64'), record_salt: salt })
+  assert.equal(material.contentKind, 'file')
+  assert.equal(material.contentLength, bytes.length)
+  assert.equal(material.contentHash?.length, 64)
+  assert.equal(material.commitment.length, 64)
 })
 
 test('server refuses paths and remote URLs', async () => {
