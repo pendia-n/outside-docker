@@ -14,7 +14,7 @@ Decisions already established:
 - A one-time purchase covers a Supplier-authorised event type and selected UTC range. Future events outside that range require a new purchase.
 - A live subscription covers one Supplier-authorised event type, starts with the preceding 30 days, follows new events for a 28-day access term, and renews every 28 days.
 - Verifier evidence is web-only: no download or export control is presented. This reduces casual leakage but cannot technically prevent screenshots, copying, recording, or extraction after browser disclosure.
-- Outdock stores no Supplier original by default. Optional client-encrypted evidence storage includes the first 100 MB and costs USD 10 for each additional started 100 MB, subject to an approved reset/billing period.
+- Outdock stores no Supplier original by default. Optional client-encrypted evidence storage includes the first 100 MB of active ciphertext per Supplier organisation; each additional started 100 MB costs USD 10 per 30-day Supplier billing period.
 - Base is the recommended first production anchor network; the proof format remains network-agnostic.
 - The four hard-coded Supplier plans are not an approved commercial decision and must not be carried into the upgrade unchanged.
 
@@ -167,7 +167,7 @@ Outdock offers two explicit evidence modes. **Commitment Only is the default.** 
 - D1 stores the object reference, integrity metadata, encryption envelope metadata, ownership, grants, receipts, and audit history.
 - The chain stores only aggregate commitments.
 
-This mode enables account-based browser disclosure without WhatsApp/email passcodes. The first 100 MB per Supplier organisation is included. Each additional started 100 MB is USD 10; the billing/reset period must be approved before Stripe configuration. Removing a download button is a deterrent, not a guarantee against copying after browser disclosure.
+This mode enables account-based browser disclosure without WhatsApp/email passcodes. The first 100 MB of active ciphertext per Supplier organisation is included. Each additional started 100 MB is USD 10 per 30-day Supplier billing period, measured on peak active stored bytes; deletion prevents the next period's charge but does not prorate the current period. Removing a download button is a deterrent, not a guarantee against copying after browser disclosure.
 
 ### 4.3 Key model
 
@@ -283,7 +283,7 @@ Confidential evidence is invitation-first:
 9. The client verifies the receipt, event chain, Merkle inclusion, and chain anchor.
 10. Every view, reveal, comparison, payment, denial, grant, and revocation is audited. No evidence download or proof-bundle export is offered.
 
-One-time access uses half-open UTC boundaries `[start_at, end_at)`. Chargeable units are `ceil((end_at - start_at) / 604800)` at USD 25 per started seven-day unit. Recommended discount: units 1–6 cost USD 25 each and units 7+ cost USD 12.50 each. Do **not** discount the whole order at unit 7: seven units would fall from USD 150 for six units to USD 87.50 and create a pricing cliff.
+One-time access uses half-open UTC boundaries `[start_at, end_at)`. Chargeable units are `ceil((end_at - start_at) / 604800)` at USD 25 per started seven-day unit. Units 1–6 cost USD 25 each and units 7+ cost USD 12.50 each. Do **not** discount the whole order at unit 7: seven units would fall from USD 150 for six units to USD 87.50 and create a pricing cliff. The selected data range is fixed; the web room remains available for seven days after successful payment, independent of how wide the selected event-time range is.
 
 Live access covers exactly one event type. At activation time `T`, the readable event-time interval begins at `T - 30 days`; new matching events remain readable while the entitlement is active. The term ends at `T + 28 days`, so the first paid term spans up to 58 days of event time. Renewal advances the trailing start and live end continuously. Price: USD 88 every 28 days.
 
@@ -391,7 +391,7 @@ Price components may include:
 - first 100 MB of optional encrypted evidence storage;
 - included scheduled anchoring;
 - API throughput and retention policy;
-- encrypted storage overage at USD 10 per additional started 100 MB, after the reset period is approved;
+- encrypted storage overage at USD 10 per additional started 100 MB of peak active ciphertext per 30-day billing period;
 - `Seal now` transactions; and
 - enterprise controls such as organisation recovery, SSO, regional storage, legal hold, and audit export.
 
@@ -582,7 +582,7 @@ Linear is not connected in this workspace. The following issues are ready to cop
 - **OD-201: Optional R2 encrypted evidence binding** — provision dev/prod ciphertext buckets with non-semantic object keys; never create objects in Commitment Only mode.
 - **OD-202: Evidence-object D1 model** — persist hash, media type, byte count, encryption version, R2 state, and owner linkage.
 - **OD-203: Client encryption package** — hash exact bytes, canonicalise manifest, generate DEK, encrypt, and wrap keys.
-- **OD-204: Paid storage metering and upload** — include the first 100 MB, meter each additional started 100 MB at USD 10, and support idempotent resumable upload.
+- **OD-204: Paid storage metering and upload** — include the first 100 MB of active ciphertext, meter peak active bytes in additional started 100 MB blocks at USD 10 per 30-day period, and support idempotent resumable upload.
 - **OD-205: Commitment Only mode** — retain privacy-minimal flow with explicit unrecoverability warning.
 - **OD-206: Key recovery decision and implementation** — implement only the approved zero-knowledge or managed-recovery posture.
 
@@ -645,10 +645,7 @@ The upgrade is not complete until these journeys pass through rendered UI and re
 ## 16. Decisions required before implementation
 
 - Zero-knowledge key handling or managed recovery?
-- Does the included 100 MB storage allowance reset monthly, every 28 days, or never? Is unused allowance carried forward?
 - Exact Supplier base price, included events/storage/egress, and overage policy?
-- Confirm marginal (recommended) rather than whole-order 50% discount from the seventh one-time unit.
-- How long may a one-time range buyer revisit the web room: 24 hours, 7 days, or another hosted-access term?
 - Who pays for Verifier access: Verifier, Supplier, or either?
 - Normal anchor cadence, target confirmation policy, and `Seal now` price/SLA?
 - Required Base confirmation policy and whether a later Ethereum L1 checkpoint is needed for court-grade packages?
