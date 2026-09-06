@@ -1,0 +1,1123 @@
+{
+  "contractName": "OutDock",
+  "sourceName": "OutDock.sol",
+  "compilerVersion": "0.8.36+commit.8a079791.Emscripten.clang",
+  "targetNetworks": [
+    {
+      "name": "base-sepolia",
+      "chainId": 84532,
+      "currency": "ETH"
+    },
+    {
+      "name": "base",
+      "chainId": 8453,
+      "currency": "ETH"
+    }
+  ],
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "initialOwner",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "initialAnchorer",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "AnchoringPaused",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "BatchAlreadyAnchored",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyBatch",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotAnchorer",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "PendingOwnerOnly",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroValue",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "anchoredAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "AnchorBatch",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes4",
+          "name": "protocolId",
+          "type": "bytes4"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "submittedBy",
+          "type": "address"
+        }
+      ],
+      "name": "AnchorProtocol",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "AnchorerUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "paused",
+          "type": "bool"
+        }
+      ],
+      "name": "AnchoringPauseUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "pendingOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "CONTRACT_VERSION",
+      "outputs": [
+        {
+          "internalType": "uint32",
+          "name": "",
+          "type": "uint32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes4",
+          "name": "protocolId",
+          "type": "bytes4"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        }
+      ],
+      "name": "anchorBatch",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "anchorIdByBatch",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "anchorers",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "anchoringPaused",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "anchors",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "anchoredAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "bytes4",
+          "name": "protocolId",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nextAnchorId",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "setAnchorer",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bool",
+          "name": "paused",
+          "type": "bool"
+        }
+      ],
+      "name": "setAnchoringPaused",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "anchorId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "verify",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes4",
+          "name": "protocolId",
+          "type": "bytes4"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "merkleRoot",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "manifestHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "leafCount",
+          "type": "uint32"
+        },
+        {
+          "internalType": "uint32",
+          "name": "eventCount",
+          "type": "uint32"
+        }
+      ],
+      "name": "verifyBatch",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561000f575f5ffd5b50604051610c6e380380610c6e83398101604081905261002e91610129565b6001600160a01b038216158061004b57506001600160a01b038116155b1561006957604051637c946ed760e01b815260040160405180910390fd5b5f80546001600160a01b0319166001600160a01b0384811691821783558316825260046020526040808320805460ff19166001179055519091907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0908290a3604051600181526001600160a01b038216907f1b42b6c2556315207293d687755ad258fc203d3d80cc512c87a9a8931b42a4869060200160405180910390a2505061015a565b80516001600160a01b0381168114610124575f5ffd5b919050565b5f5f6040838503121561013a575f5ffd5b6101438361010e565b91506101516020840161010e565b90509250929050565b610b07806101675f395ff3fe608060405234801561000f575f5ffd5b50600436106100f0575f3560e01c80638da5cb5b11610093578063bc69b92011610063578063bc69b92014610298578063e30c3978146102b7578063ec8fbb3f146102ca578063f2fde38b146102dd575f5ffd5b80638da5cb5b1461023f578063a160368a14610269578063aa9782571461027c578063aee885bc1461028f575f5ffd5b80635ab261c2116100ce5780635ab261c2146101f457806362b7a5d31461020757806379ba5097146102145780637a1162661461021e575f5ffd5b806325268889146100f4578063368b733e1461012b57806338b90333146101d7575b5f5ffd5b610116610102366004610935565b60046020525f908152604090205460ff1681565b60405190151581526020015b60405180910390f35b61018961013936600461094e565b60056020525f908152604090208054600182015460029092015490919067ffffffffffffffff81169063ffffffff600160401b8204811691600160601b810490911690600160801b900460e01b86565b60408051968752602087019590955267ffffffffffffffff9093169385019390935263ffffffff908116606085015290911660808301526001600160e01b03191660a082015260c001610122565b6101df600281565b60405163ffffffff9091168152602001610122565b61011661020236600461098f565b6102f0565b6003546101169060ff1681565b61021c6103a1565b005b61023161022c3660046109ea565b610422565b604051908152602001610122565b5f54610251906001600160a01b031681565b6040516001600160a01b039091168152602001610122565b61021c610277366004610a3a565b610713565b61011661028a366004610a53565b610784565b61023160025481565b6102316102a636600461094e565b60066020525f908152604090205481565b600154610251906001600160a01b031681565b61021c6102d8366004610a7c565b6107ca565b61021c6102eb366004610935565b610879565b5f8681526006602052604081205480820361030e575f915050610397565b5f81815260056020526040902060028101546001600160e01b0319898116600160801b90920460e01b161480156103455750805487145b80156103545750858160010154145b80156103735750600281015463ffffffff868116600160401b90920416145b80156103925750600281015463ffffffff858116600160601b90920416145b925050505b9695505050505050565b6001546001600160a01b031633146103cc5760405163306bd3d760e01b815260040160405180910390fd5b5f8054336001600160a01b0319808316821784556001805490911690556040516001600160a01b0390921692909183917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a350565b335f9081526004602052604081205460ff166104515760405163d46c421560e01b815260040160405180910390fd5b60035460ff16156104755760405163fe1a159560e01b815260040160405180910390fd5b6001600160e01b03198716158061048a575085155b80610493575084155b8061049c575083155b156104ba57604051637c946ed760e01b815260040160405180910390fd5b63ffffffff831615806104d1575063ffffffff8216155b156104ef5760405163c2e5347d60e01b815260040160405180910390fd5b5f868152600660205260409020541561051b576040516303c6075160e51b815260040160405180910390fd5b60025f815461052990610aad565b91905081905590505f4290506040518060c001604052808781526020018681526020018267ffffffffffffffff1681526020018563ffffffff1681526020018463ffffffff168152602001896001600160e01b03191681525060055f8481526020019081526020015f205f820151815f0155602082015181600101556040820151816002015f6101000a81548167ffffffffffffffff021916908367ffffffffffffffff16021790555060608201518160020160086101000a81548163ffffffff021916908363ffffffff160217905550608082015181600201600c6101000a81548163ffffffff021916908363ffffffff16021790555060a08201518160020160106101000a81548163ffffffff021916908360e01c02179055509050508160065f8981526020019081526020015f20819055508587837f02eceffbdcaec5a68a57c3951f00b6b94855c6e9b609a5c29aded9ca4e4c5336888888876040516106bd949392919093845263ffffffff92831660208501529116604083015267ffffffffffffffff16606082015260800190565b60405180910390a46040513381526001600160e01b0319891690889084907fb11d577c7395d968bd54183ade0afbac784072dfa11a7bb7f2bf85856c67b3429060200160405180910390a4509695505050505050565b5f546001600160a01b0316331461073d576040516330cd747160e01b815260040160405180910390fd5b6003805460ff19168215159081179091556040519081527f6fec92f23fcaa3e71b6a5e83a8c10842261c2cbf97fd043548c5209a849e947f9060200160405180910390a150565b5f831580610793575060025484115b1561079f57505f6107c3565b5f8481526005602052604090208054841480156107bf5750828160010154145b9150505b9392505050565b5f546001600160a01b031633146107f4576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b03821661081b57604051637c946ed760e01b815260040160405180910390fd5b6001600160a01b0382165f81815260046020908152604091829020805460ff191685151590811790915591519182527f1b42b6c2556315207293d687755ad258fc203d3d80cc512c87a9a8931b42a486910160405180910390a25050565b5f546001600160a01b031633146108a3576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b0381166108ca57604051637c946ed760e01b815260040160405180910390fd5b600180546001600160a01b0319166001600160a01b038381169182179092555f8054604051929316917f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227009190a350565b80356001600160a01b0381168114610930575f5ffd5b919050565b5f60208284031215610945575f5ffd5b6107c38261091a565b5f6020828403121561095e575f5ffd5b5035919050565b80356001600160e01b031981168114610930575f5ffd5b803563ffffffff81168114610930575f5ffd5b5f5f5f5f5f5f60c087890312156109a4575f5ffd5b863595506109b460208801610965565b945060408701359350606087013592506109d06080880161097c565b91506109de60a0880161097c565b90509295509295509295565b5f5f5f5f5f5f60c087890312156109ff575f5ffd5b610a0887610965565b95506020870135945060408701359350606087013592506109d06080880161097c565b80358015158114610930575f5ffd5b5f60208284031215610a4a575f5ffd5b6107c382610a2b565b5f5f5f60608486031215610a65575f5ffd5b505081359360208301359350604090920135919050565b5f5f60408385031215610a8d575f5ffd5b610a968361091a565b9150610aa460208401610a2b565b90509250929050565b5f60018201610aca57634e487b7160e01b5f52601160045260245ffd5b506001019056fea264697066735822122043de575a8f80317752129dedc3165f00d4f49b3ab33ddb087a8124f6562ee13864736f6c63430008240033",
+  "deployedBytecode": "0x608060405234801561000f575f5ffd5b50600436106100f0575f3560e01c80638da5cb5b11610093578063bc69b92011610063578063bc69b92014610298578063e30c3978146102b7578063ec8fbb3f146102ca578063f2fde38b146102dd575f5ffd5b80638da5cb5b1461023f578063a160368a14610269578063aa9782571461027c578063aee885bc1461028f575f5ffd5b80635ab261c2116100ce5780635ab261c2146101f457806362b7a5d31461020757806379ba5097146102145780637a1162661461021e575f5ffd5b806325268889146100f4578063368b733e1461012b57806338b90333146101d7575b5f5ffd5b610116610102366004610935565b60046020525f908152604090205460ff1681565b60405190151581526020015b60405180910390f35b61018961013936600461094e565b60056020525f908152604090208054600182015460029092015490919067ffffffffffffffff81169063ffffffff600160401b8204811691600160601b810490911690600160801b900460e01b86565b60408051968752602087019590955267ffffffffffffffff9093169385019390935263ffffffff908116606085015290911660808301526001600160e01b03191660a082015260c001610122565b6101df600281565b60405163ffffffff9091168152602001610122565b61011661020236600461098f565b6102f0565b6003546101169060ff1681565b61021c6103a1565b005b61023161022c3660046109ea565b610422565b604051908152602001610122565b5f54610251906001600160a01b031681565b6040516001600160a01b039091168152602001610122565b61021c610277366004610a3a565b610713565b61011661028a366004610a53565b610784565b61023160025481565b6102316102a636600461094e565b60066020525f908152604090205481565b600154610251906001600160a01b031681565b61021c6102d8366004610a7c565b6107ca565b61021c6102eb366004610935565b610879565b5f8681526006602052604081205480820361030e575f915050610397565b5f81815260056020526040902060028101546001600160e01b0319898116600160801b90920460e01b161480156103455750805487145b80156103545750858160010154145b80156103735750600281015463ffffffff868116600160401b90920416145b80156103925750600281015463ffffffff858116600160601b90920416145b925050505b9695505050505050565b6001546001600160a01b031633146103cc5760405163306bd3d760e01b815260040160405180910390fd5b5f8054336001600160a01b0319808316821784556001805490911690556040516001600160a01b0390921692909183917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e091a350565b335f9081526004602052604081205460ff166104515760405163d46c421560e01b815260040160405180910390fd5b60035460ff16156104755760405163fe1a159560e01b815260040160405180910390fd5b6001600160e01b03198716158061048a575085155b80610493575084155b8061049c575083155b156104ba57604051637c946ed760e01b815260040160405180910390fd5b63ffffffff831615806104d1575063ffffffff8216155b156104ef5760405163c2e5347d60e01b815260040160405180910390fd5b5f868152600660205260409020541561051b576040516303c6075160e51b815260040160405180910390fd5b60025f815461052990610aad565b91905081905590505f4290506040518060c001604052808781526020018681526020018267ffffffffffffffff1681526020018563ffffffff1681526020018463ffffffff168152602001896001600160e01b03191681525060055f8481526020019081526020015f205f820151815f0155602082015181600101556040820151816002015f6101000a81548167ffffffffffffffff021916908367ffffffffffffffff16021790555060608201518160020160086101000a81548163ffffffff021916908363ffffffff160217905550608082015181600201600c6101000a81548163ffffffff021916908363ffffffff16021790555060a08201518160020160106101000a81548163ffffffff021916908360e01c02179055509050508160065f8981526020019081526020015f20819055508587837f02eceffbdcaec5a68a57c3951f00b6b94855c6e9b609a5c29aded9ca4e4c5336888888876040516106bd949392919093845263ffffffff92831660208501529116604083015267ffffffffffffffff16606082015260800190565b60405180910390a46040513381526001600160e01b0319891690889084907fb11d577c7395d968bd54183ade0afbac784072dfa11a7bb7f2bf85856c67b3429060200160405180910390a4509695505050505050565b5f546001600160a01b0316331461073d576040516330cd747160e01b815260040160405180910390fd5b6003805460ff19168215159081179091556040519081527f6fec92f23fcaa3e71b6a5e83a8c10842261c2cbf97fd043548c5209a849e947f9060200160405180910390a150565b5f831580610793575060025484115b1561079f57505f6107c3565b5f8481526005602052604090208054841480156107bf5750828160010154145b9150505b9392505050565b5f546001600160a01b031633146107f4576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b03821661081b57604051637c946ed760e01b815260040160405180910390fd5b6001600160a01b0382165f81815260046020908152604091829020805460ff191685151590811790915591519182527f1b42b6c2556315207293d687755ad258fc203d3d80cc512c87a9a8931b42a486910160405180910390a25050565b5f546001600160a01b031633146108a3576040516330cd747160e01b815260040160405180910390fd5b6001600160a01b0381166108ca57604051637c946ed760e01b815260040160405180910390fd5b600180546001600160a01b0319166001600160a01b038381169182179092555f8054604051929316917f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227009190a350565b80356001600160a01b0381168114610930575f5ffd5b919050565b5f60208284031215610945575f5ffd5b6107c38261091a565b5f6020828403121561095e575f5ffd5b5035919050565b80356001600160e01b031981168114610930575f5ffd5b803563ffffffff81168114610930575f5ffd5b5f5f5f5f5f5f60c087890312156109a4575f5ffd5b863595506109b460208801610965565b945060408701359350606087013592506109d06080880161097c565b91506109de60a0880161097c565b90509295509295509295565b5f5f5f5f5f5f60c087890312156109ff575f5ffd5b610a0887610965565b95506020870135945060408701359350606087013592506109d06080880161097c565b80358015158114610930575f5ffd5b5f60208284031215610a4a575f5ffd5b6107c382610a2b565b5f5f5f60608486031215610a65575f5ffd5b505081359360208301359350604090920135919050565b5f5f60408385031215610a8d575f5ffd5b610a968361091a565b9150610aa460208401610a2b565b90509250929050565b5f60018201610aca57634e487b7160e01b5f52601160045260245ffd5b506001019056fea264697066735822122043de575a8f80317752129dedc3165f00d4f49b3ab33ddb087a8124f6562ee13864736f6c63430008240033",
+  "metadata": {
+    "compiler": {
+      "version": "0.8.36+commit.8a079791"
+    },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "initialOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "initialAnchorer",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "AnchoringPaused",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "BatchAlreadyAnchored",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyBatch",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "NotAnchorer",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "NotOwner",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "PendingOwnerOnly",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            }
+          ],
+          "name": "AnchorBatch",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes4",
+              "name": "protocolId",
+              "type": "bytes4"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "submittedBy",
+              "type": "address"
+            }
+          ],
+          "name": "AnchorProtocol",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "allowed",
+              "type": "bool"
+            }
+          ],
+          "name": "AnchorerUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "name": "AnchoringPauseUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "pendingOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferStarted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "CONTRACT_VERSION",
+          "outputs": [
+            {
+              "internalType": "uint32",
+              "name": "",
+              "type": "uint32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "acceptOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes4",
+              "name": "protocolId",
+              "type": "bytes4"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            }
+          ],
+          "name": "anchorBatch",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "anchorIdByBatch",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "anchorers",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "anchoringPaused",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "anchors",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "bytes4",
+              "name": "protocolId",
+              "type": "bytes4"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "nextAnchorId",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            },
+            {
+              "internalType": "bool",
+              "name": "allowed",
+              "type": "bool"
+            }
+          ],
+          "name": "setAnchorer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bool",
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "name": "setAnchoringPaused",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "anchorId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "verify",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "batchId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes4",
+              "name": "protocolId",
+              "type": "bytes4"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "merkleRoot",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "manifestHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "leafCount",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint32",
+              "name": "eventCount",
+              "type": "uint32"
+            }
+          ],
+          "name": "verifyBatch",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ],
+      "devdoc": {
+        "kind": "dev",
+        "methods": {
+          "anchorBatch(bytes4,bytes32,bytes32,bytes32,uint32,uint32)": {
+            "params": {
+              "protocolId": "Protocol discriminator, for example bytes4(\"OD1\") or bytes4(\"OD2\")."
+            }
+          }
+        },
+        "title": "OutDock Anchor",
+        "version": 1
+      },
+      "userdoc": {
+        "kind": "user",
+        "methods": {
+          "anchorBatch(bytes4,bytes32,bytes32,bytes32,uint32,uint32)": {
+            "notice": "Records one immutable batch commitment."
+          },
+          "setAnchorer(address,bool)": {
+            "notice": "Grants or revokes a Worker hot wallet without changing contract ownership."
+          },
+          "setAnchoringPaused(bool)": {
+            "notice": "Stops new submissions without affecting already anchored batches."
+          },
+          "verify(uint256,bytes32,bytes32)": {
+            "notice": "Backward-compatible commitment verification used by existing proof readers."
+          },
+          "verifyBatch(bytes32,bytes4,bytes32,bytes32,uint32,uint32)": {
+            "notice": "Verifies the complete public batch commitment, including its protocol and counts."
+          }
+        },
+        "notice": "Stores aggregate evidence-batch commitments only. No evidence, plaintext, ciphertext, content hash, salt, passcode, payment, or verifier grant is stored here.",
+        "version": 1
+      }
+    },
+    "settings": {
+      "compilationTarget": {
+        "OutDock.sol": "OutDock"
+      },
+      "evmVersion": "osaka",
+      "libraries": {},
+      "metadata": {
+        "bytecodeHash": "ipfs"
+      },
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "remappings": []
+    },
+    "sources": {
+      "OutDock.sol": {
+        "keccak256": "0x53dcb117b9e3078a02bda9bd6b83c833992e698faf759ab4761ad4333374987a",
+        "license": "MIT",
+        "urls": [
+          "bzz-raw://e02ffe99285a48c0eb17d0ba49979de58a30eaa7dce68217cdc1abc4d980b070",
+          "dweb:/ipfs/Qmb9jFsR7Mdtym6RKizRjB6tPX8Wt2uYZbJsSWD9zE8BAB"
+        ]
+      }
+    },
+    "version": 1
+  }
+}

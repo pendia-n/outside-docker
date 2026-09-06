@@ -50,6 +50,7 @@ export interface Env {
   BASE_CHAIN_ID_DEV: string
   BASE_CHAIN_ID_PROD: string
   BASE_CONFIRMATIONS?: string
+  OUTDOCK_ANCHOR_PROTOCOL_ID?: string
 }
 
 export interface ApiFailure {

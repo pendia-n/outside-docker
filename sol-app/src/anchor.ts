@@ -53,16 +53,16 @@ export interface PolygonAnchorClient {
 }
 
 export interface EthersAnchorContractLike {
-  anchorBatch(batchId: string, merkleRoot: string, manifestHash: string, leafCount: number, eventCount: number): Promise<{
+  anchorBatch(protocolId: string, batchId: string, merkleRoot: string, manifestHash: string, leafCount: number, eventCount: number): Promise<{
     hash: string
     wait(confirmations?: number): Promise<AnchorTransactionReceipt | null>
   }>
 }
 
-export function createEthersAnchorClient(contract: EthersAnchorContractLike): PolygonAnchorClient {
+export function createEthersAnchorClient(contract: EthersAnchorContractLike, protocolId = '0x4f443100'): PolygonAnchorClient {
   return {
     anchorBatch(input) {
-      return contract.anchorBatch(input.batchId, input.merkleRoot, input.manifestHash, input.leafCount, input.eventCount)
+      return contract.anchorBatch(protocolId, input.batchId, input.merkleRoot, input.manifestHash, input.leafCount, input.eventCount)
     },
   }
 }

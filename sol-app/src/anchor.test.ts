@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildAnchorMaterial, PolygonAnchorService } from './anchor'
+import { buildAnchorMaterial, createEthersAnchorClient, PolygonAnchorService } from './anchor'
 import { verifyMerkleProof } from './merkle'
 
 test('anchor material binds ordered event ids and proofs', async () => {
@@ -22,6 +22,31 @@ test('changing an event id changes the anchor root', async () => {
   const first = await buildAnchorMaterial([{ id: 'event-a', proof: 'a'.repeat(64), received_at: 'x' }])
   const second = await buildAnchorMaterial([{ id: 'event-b', proof: 'a'.repeat(64), received_at: 'x' }])
   assert.notEqual(first.merkleRoot, second.merkleRoot)
+})
+
+test('ethers anchor client submits the configured protocol discriminator', async () => {
+  let received: unknown[] = []
+  const client = createEthersAnchorClient({
+    async anchorBatch(...input) {
+      received = input
+      return { hash: `0x${'a'.repeat(64)}`, async wait() { return { status: 1 } } }
+    },
+  }, '0x4f443200')
+  await client.anchorBatch({
+    batchId: `0x${'1'.repeat(64)}`,
+    merkleRoot: `0x${'2'.repeat(64)}`,
+    manifestHash: `0x${'3'.repeat(64)}`,
+    leafCount: 4,
+    eventCount: 4,
+  })
+  assert.deepEqual(received, [
+    '0x4f443200',
+    `0x${'1'.repeat(64)}`,
+    `0x${'2'.repeat(64)}`,
+    `0x${'3'.repeat(64)}`,
+    4,
+    4,
+  ])
 })
 
 test('prepared batch binds manifest, counts, and chain configuration in column order', async () => {

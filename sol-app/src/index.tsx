@@ -734,10 +734,10 @@ async function runAnchoring(environment: Env): Promise<void> {
   )
   const signer = new Wallet(environment.BASE_PRIVATE_KEY, provider)
   const contract = new Contract(contractAddress, [
-    'function anchorBatch(bytes32 batchId, bytes32 merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount) returns (uint256)',
+    'function anchorBatch(bytes4 protocolId, bytes32 batchId, bytes32 merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount) returns (uint256)',
   ], signer) as unknown as EthersAnchorContractLike
   const anchorClient = {
-    ...createEthersAnchorClient(contract),
+    ...createEthersAnchorClient(contract, environment.OUTDOCK_ANCHOR_PROTOCOL_ID || '0x4f443100'),
     async transactionStatus(transactionHash: string) {
       const receipt = await provider.getTransactionReceipt(transactionHash)
       if (receipt) {
