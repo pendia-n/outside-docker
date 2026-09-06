@@ -23,8 +23,9 @@ const constructorArguments = ethers.AbiCoder.defaultAbiCoder()
   .slice(2)
 
 async function etherscan(parameters) {
-  const body = new URLSearchParams({ chainid: '8453', apikey: apiKey, ...parameters })
-  const response = await fetch('https://api.etherscan.io/v2/api', { method: 'POST', body })
+  const query = new URLSearchParams({ chainid: '8453', apikey: apiKey })
+  const body = new URLSearchParams(parameters)
+  const response = await fetch(`https://api.etherscan.io/v2/api?${query}`, { method: 'POST', body })
   if (!response.ok) throw new Error(`Etherscan HTTP ${response.status}`)
   return response.json()
 }
@@ -39,7 +40,7 @@ const submitted = await etherscan({
   compilerversion: compilerVersion,
   optimizationUsed: '1',
   runs: '200',
-  constructorArguements: constructorArguments,
+  constructorArguments,
   licenseType: '3',
 })
 if (submitted.status !== '1') {
