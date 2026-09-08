@@ -1,6 +1,6 @@
 # Outside Docker
 
-Outside Docker is a Cloudflare Worker for preserving evidence integrity without retaining original files. It supports human case records (Track H), machine/gateway records (Track M), signed receipts, append-only event chains, scoped sharing, portable proof/PDF exports, and Polygon batch anchoring.
+Outside Docker is preserving evidence integrity without retaining original files. It supports human case records (Track H), machine/gateway records (Track M), signed receipts, append-only event chains, scoped sharing, portable proof/PDF exports, and Polygon batch anchoring.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ The authoritative event proof is:
 SHA-256(UTF8("OD1|EVENT|<chain>|<position>|<received>|<commitment>|<previous-proof>"))
 ```
 
-## Local development
+## Local dev
 
 ```bash
 pnpm install --frozen-lockfile
@@ -74,3 +74,4 @@ Machine writes require an `Idempotency-Key`. Replaying the same request returns 
 5. Run `pnpm run check`, `pnpm run build`, and staging browser/API journeys before production traffic.
 
 The system proves integrity, sequence, and anchoring. It does not prove that the underlying content was truthful.
+TEST
