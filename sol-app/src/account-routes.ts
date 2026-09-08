@@ -21,12 +21,13 @@ import {
   confirmTotpEnrollment,
   createTotpEnrollment,
   decryptTotpSecret,
+  deriveRecoveryCodePepper,
+  deriveTotpEncryptionKey,
   encryptTotpSecret,
   generateRecoveryCodes,
   hashRecoveryCodes,
   verifyRecoveryCode,
   verifyTotpCode,
-  type RecoveryCodePepper,
   type TotpSecretEnvelope,
 } from './totp'
 import type { Env, SupplierMode } from './types'
@@ -309,15 +310,16 @@ function totpContext(environment: Env, userId: string) {
   return {
     userId,
     environment: environment.ENV,
-    keyId: requiredConfiguration(environment, 'TOTP_KEY_ID'),
+    keyId: 'od-totp-derived-v1',
   } as const
 }
 
-function recoveryPepper(environment: Env): RecoveryCodePepper {
-  return {
-    keyId: requiredConfiguration(environment, 'TOTP_RECOVERY_KEY_ID'),
-    secret: requiredConfiguration(environment, 'TOTP_RECOVERY_PEPPER'),
-  }
+async function totpEncryptionKey(environment: Env): Promise<Uint8Array> {
+  return deriveTotpEncryptionKey(requiredConfiguration(environment, 'JWT_SECRET'))
+}
+
+async function recoveryPepper(environment: Env) {
+  return deriveRecoveryCodePepper(requiredConfiguration(environment, 'JWT_SECRET'))
 }
 
 async function verifySecondFactor(database: D1Database, environment: Env, userId: string, code: string): Promise<boolean> {
@@ -328,7 +330,7 @@ async function verifySecondFactor(database: D1Database, environment: Env, userId
   if (!row) return false
   if (/^\d{6}$/.test(code.replace(/[\s-]/gu, ''))) {
     const envelope = JSON.parse(row.secret_ciphertext) as TotpSecretEnvelope
-    const secret = await decryptTotpSecret(envelope, requiredConfiguration(environment, 'TOTP_ENCRYPTION_KEY'), totpContext(environment, userId))
+    const secret = await decryptTotpSecret(envelope, await totpEncryptionKey(environment), totpContext(environment, userId))
     const result = await verifyTotpCode(secret, code, { lastUsedCounter: row.last_used_counter })
     if (!result.valid || result.counter == null) return false
     const updated = await database.prepare(`
@@ -341,7 +343,7 @@ async function verifySecondFactor(database: D1Database, environment: Env, userId
     SELECT id, code_hash FROM totp_recovery_codes WHERE user_id = ? AND used_at IS NULL
   `).bind(userId).all<{ id: string; code_hash: string }>()
   for (const recovery of recoveryRows.results) {
-    if (await verifyRecoveryCode(code, recovery.code_hash, userId, recoveryPepper(environment))) {
+    if (await verifyRecoveryCode(code, recovery.code_hash, userId, await recoveryPepper(environment))) {
       const used = await database.prepare(`
         UPDATE totp_recovery_codes SET used_at = ? WHERE id = ? AND used_at IS NULL
       `).bind(new Date().toISOString(), recovery.id).run()
@@ -490,7 +492,7 @@ export function createAccountRoutes(): Hono<{ Bindings: Env }> {
     const enrollment = createTotpEnrollment('Outdock', actor.user.username)
     const envelope = await encryptTotpSecret(
       enrollment.secret,
-      requiredConfiguration(context.env, 'TOTP_ENCRYPTION_KEY'),
+      await totpEncryptionKey(context.env),
       totpContext(context.env, actor.user.id),
     )
     const now = new Date().toISOString()
@@ -536,13 +538,13 @@ export function createAccountRoutes(): Hono<{ Bindings: Env }> {
     if (!stored) throw new AccountError(404, 'totp_enrollment_not_found', 'Start TOTP enrollment first')
     const result = await confirmTotpEnrollment(
       JSON.parse(stored.secret_ciphertext) as TotpSecretEnvelope,
-      requiredConfiguration(context.env, 'TOTP_ENCRYPTION_KEY'),
+      await totpEncryptionKey(context.env),
       totpContext(context.env, actor.user.id),
       code,
     )
     if (!result.valid || result.counter == null) throw new AccountError(400, 'invalid_totp_code', 'Authenticator code is invalid')
     const recoveryCodes = generateRecoveryCodes()
-    const hashes = await hashRecoveryCodes(recoveryCodes, actor.user.id, recoveryPepper(context.env))
+    const hashes = await hashRecoveryCodes(recoveryCodes, actor.user.id, await recoveryPepper(context.env))
     const now = new Date().toISOString()
     const statements: D1PreparedStatement[] = [
       database.prepare(`

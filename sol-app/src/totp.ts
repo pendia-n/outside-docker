@@ -7,6 +7,7 @@ import {
   randomBytes,
   requireInteger,
   requireString,
+  sha256Bytes,
   timingSafeEqual,
   utf8,
 } from './validation'
@@ -27,6 +28,8 @@ export const DEFAULT_TOTP_PARAMETERS: Readonly<TotpParameters> = Object.freeze({
 
 export const TOTP_SECRET_ENVELOPE_VERSION = 'OD-TOTP-SECRET-1'
 export const RECOVERY_HASH_VERSION = 'OD-RECOVERY-HMAC-1'
+export const DERIVED_TOTP_KEY_ID = 'od-totp-derived-v1'
+export const DERIVED_RECOVERY_KEY_ID = 'od-recovery-derived-v1'
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 const RECOVERY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
@@ -217,6 +220,19 @@ export interface TotpSecretEnvelope {
 }
 
 export type TotpEncryptionKey = CryptoKey | Uint8Array | string
+
+export async function deriveTotpEncryptionKey(serverSecret: string): Promise<Uint8Array> {
+  requireString(serverSecret, 'server secret', { max: 4096 })
+  return sha256Bytes(`OD1-TOTP-ENCRYPTION|${serverSecret}`)
+}
+
+export async function deriveRecoveryCodePepper(serverSecret: string): Promise<RecoveryCodePepper> {
+  requireString(serverSecret, 'server secret', { max: 4096 })
+  return {
+    keyId: DERIVED_RECOVERY_KEY_ID,
+    secret: await sha256Bytes(`OD1-TOTP-RECOVERY|${serverSecret}`),
+  }
+}
 
 function encryptionContext(context: TotpEncryptionContext): string {
   const userId = requireString(context.userId, 'userId', { max: 128 })

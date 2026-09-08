@@ -24,10 +24,6 @@ export interface Env {
 
   JWT_SECRET: string
   CSRF_SECRET?: string
-  TOTP_ENCRYPTION_KEY?: string
-  TOTP_KEY_ID?: string
-  TOTP_RECOVERY_PEPPER?: string
-  TOTP_RECOVERY_KEY_ID?: string
   RECEIPT_PRIVATE_KEY_JWK?: string
   RECEIPT_PUBLIC_KEY_JWK?: string
   RECEIPT_KEY_ID?: string
