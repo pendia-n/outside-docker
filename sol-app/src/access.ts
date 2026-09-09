@@ -34,8 +34,10 @@ export function quoteOneTimeRange(startValue: string | Date, endValue: string | 
   if (seconds <= 0) throw new DomainError(400, 'invalid_access_range', 'range_end must be after range_start')
   const units = Math.ceil(seconds / SEVEN_DAYS_SECONDS)
   if (units > 520) throw new DomainError(400, 'access_range_too_large', 'One checkout may cover at most ten years')
-  const fullPriceUnits = Math.min(units, ONE_TIME_FULL_PRICE_UNITS)
-  const discountedUnits = Math.max(0, units - ONE_TIME_FULL_PRICE_UNITS)
+  // The discount applies to the entire single checkout once it reaches seven units.
+  const discounted = units >= ONE_TIME_FULL_PRICE_UNITS + 1
+  const fullPriceUnits = discounted ? 0 : units
+  const discountedUnits = discounted ? units : 0
   return {
     accessModel: 'one_time_range',
     rangeStart: start.toISOString(),

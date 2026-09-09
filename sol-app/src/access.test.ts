@@ -4,7 +4,7 @@ import { quoteOneTimeRange, quoteSubscriptionWindow } from './access'
 
 const DAY = 86_400_000
 
-test('one-time ranges bill every started seven-day unit and discount unit seven onward', () => {
+test('one-time ranges discount the entire transaction at seven or more units', () => {
   const start = new Date('2026-07-01T15:00:00.000Z')
   assert.deepEqual(quoteOneTimeRange(start, new Date(start.valueOf() + 7 * DAY)), {
     accessModel: 'one_time_range',
@@ -18,7 +18,11 @@ test('one-time ranges bill every started seven-day unit and discount unit seven 
     pricingVersion: 'outdock-2026-09',
   })
   assert.equal(quoteOneTimeRange(start, new Date(start.valueOf() + 42 * DAY)).amountCents, 15_000)
-  assert.equal(quoteOneTimeRange(start, new Date(start.valueOf() + 42 * DAY + 1)).amountCents, 16_250)
+  const sevenUnits = quoteOneTimeRange(start, new Date(start.valueOf() + 42 * DAY + 1))
+  assert.equal(sevenUnits.fullPriceUnits, 0)
+  assert.equal(sevenUnits.discountedUnits, 7)
+  assert.equal(sevenUnits.amountCents, 8_750)
+  assert.equal(quoteOneTimeRange(start, new Date(start.valueOf() + 56 * DAY)).amountCents, 10_000)
 })
 
 test('subscription covers a 30-day lookback and 28 live access days', () => {
