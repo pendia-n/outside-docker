@@ -40,8 +40,11 @@ export interface Env {
 
   BASE_RPC_URL?: string
   BASE_PRIVATE_KEY?: string
+  POLYGON_RPC_URL?: string
+  POLYGON_PRIVATE_KEY?: string
   BASE_CONTRACT_ADDRESS_DEV: string
   BASE_CONTRACT_ADDRESS_PROD: string
+  POLYGON_CONTRACT_ADDRESS_DEV?: string
   BASE_CHAIN_ID_DEV: string
   BASE_CHAIN_ID_PROD: string
   BASE_CONFIRMATIONS?: string

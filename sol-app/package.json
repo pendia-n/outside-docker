@@ -8,6 +8,7 @@
     "test": "node --experimental-strip-types --experimental-transform-types --experimental-loader ./scripts/ts-resolver.mjs --test src/*.test.ts",
     "build:contract": "node ./scripts/build-contract.mjs",
     "deploy:contract:base": "node ./scripts/deploy-mainnet-contract.mjs",
+    "deploy:contract:amoy": "node ./scripts/deploy-amoy-contract.mjs",
     "verify:contract:base": "node ./scripts/verify-contract.mjs",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build:contract && pnpm run build",
     "preview": "$npm_execpath run build && vite preview",

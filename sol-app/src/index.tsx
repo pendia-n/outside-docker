@@ -333,17 +333,20 @@ async function trustedReceiptKeys(database: D1Database, environment: Env['ENV'])
 
 function polygonVerifier(environment: Env) {
   return async (anchor: NonNullable<PortableProofV1['anchor']>): Promise<boolean> => {
-    const configuredAddress = environment.ENV === 'prod'
+    const production = environment.ENV === 'prod'
+    const configuredAddress = production
       ? required(environment, 'BASE_CONTRACT_ADDRESS_PROD')
-      : required(environment, 'BASE_CONTRACT_ADDRESS_DEV')
+      : required(environment, 'POLYGON_CONTRACT_ADDRESS_DEV')
+    const chainId = production ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV
+    const rpcUrl = production ? environment.BASE_RPC_URL : environment.POLYGON_RPC_URL
     if (
-      anchor.chain_id !== (environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV)
+      anchor.chain_id !== chainId
       || anchor.contract_address.toLowerCase() !== configuredAddress.toLowerCase()
-      || !environment.BASE_RPC_URL
+      || !rpcUrl
     ) return false
     const provider = new JsonRpcProvider(
-      environment.BASE_RPC_URL,
-      Number(environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV),
+      rpcUrl,
+      Number(chainId),
       { staticNetwork: true },
     )
     const contract = new Contract(configuredAddress, [
@@ -721,17 +724,20 @@ app.notFound((context) => context.json({
 }, 404))
 
 async function runAnchoring(environment: Env): Promise<void> {
-  if (!environment.BASE_RPC_URL || !environment.BASE_PRIVATE_KEY) return
-  const contractAddress = environment.ENV === 'prod'
+  const production = environment.ENV === 'prod'
+  const rpcUrl = production ? environment.BASE_RPC_URL : environment.POLYGON_RPC_URL
+  const privateKey = production ? environment.BASE_PRIVATE_KEY : environment.POLYGON_PRIVATE_KEY
+  if (!rpcUrl || !privateKey) return
+  const contractAddress = production
     ? environment.BASE_CONTRACT_ADDRESS_PROD
-    : environment.BASE_CONTRACT_ADDRESS_DEV
+    : environment.POLYGON_CONTRACT_ADDRESS_DEV
   if (!contractAddress) return
   const provider = new JsonRpcProvider(
-    environment.BASE_RPC_URL,
-    Number(environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV),
+    rpcUrl,
+    Number(production ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV),
     { staticNetwork: true },
   )
-  const signer = new Wallet(environment.BASE_PRIVATE_KEY, provider)
+  const signer = new Wallet(privateKey, provider)
   const contract = new Contract(contractAddress, [
     'function anchorBatch(bytes4 protocolId, bytes32 batchId, bytes32 merkleRoot, bytes32 manifestHash, uint32 leafCount, uint32 eventCount) returns (uint256)',
   ], signer) as unknown as EthersAnchorContractLike
@@ -759,8 +765,8 @@ async function runAnchoring(environment: Env): Promise<void> {
     anchorClient,
     {
       environment: environment.ENV,
-      chainId: environment.ENV === 'prod' ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV,
-      network: environment.ENV === 'prod' ? 'base' : 'base-sepolia',
+      chainId: production ? environment.BASE_CHAIN_ID_PROD : environment.BASE_CHAIN_ID_DEV,
+      network: production ? 'base' : 'polygon-amoy',
       contractAddress,
       batchSize: 500,
       confirmations: Number(environment.BASE_CONFIRMATIONS || 3),
