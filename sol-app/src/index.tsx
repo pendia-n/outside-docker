@@ -222,7 +222,6 @@ app.route('/api', createAccessRoutes({
   environment: (context) => context.env.ENV,
   priceIds: (context) => ({
     full: required(context.env, 'STRIPE_PRICE_VERIFIER_7D'),
-    discounted: required(context.env, 'STRIPE_PRICE_VERIFIER_7D_DISCOUNTED'),
     subscription: required(context.env, 'STRIPE_PRICE_VERIFIER_SUBSCRIPTION_28D'),
   }),
 }))

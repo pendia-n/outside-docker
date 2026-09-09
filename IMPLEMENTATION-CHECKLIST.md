@@ -35,7 +35,7 @@ This file tracks the accepted product direction against verified code. A checked
 ## Verifier billing
 
 - [x] Implement one-time access quoted in 7-day units at $25 each.
-- [x] Apply 50% to the seventh and later 7-day units within the same checkout.
+- [x] Apply 50% to the entire checkout when it contains seven or more 7-day units.
 - [x] Implement $88 subscriptions granting 28 days of access, a 30-day historical lookback at purchase, and new records through expiry.
 - [x] Create access grants only from verified Stripe webhooks with exact server-calculated amount checks.
 - [x] Replace raw scope-ID registration with account-first, invitation/event-selection checkout.

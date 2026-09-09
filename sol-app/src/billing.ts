@@ -1,4 +1,5 @@
 import type { RuntimeEnvironment } from './validation'
+import { ONE_TIME_DISCOUNTED_UNIT_CENTS } from './access'
 import {
   bytesToHex,
   hexToBytes,
@@ -56,7 +57,6 @@ export interface AccessCheckoutInput {
   fullPriceUnits: number
   discountedUnits: number
   fullPriceId?: string
-  discountedPriceId?: string
   subscriptionPriceId?: string
   username: string
   customerEmail?: string | null
@@ -408,7 +408,9 @@ export class StripeRestClient {
         line += 1
       }
       if (input.discountedUnits > 0) {
-        parameters.set(`line_items[${line}][price]`, assertStripeId(input.discountedPriceId as string, 'price', 'discounted seven-day price ID'))
+        parameters.set(`line_items[${line}][price_data][currency]`, 'usd')
+        parameters.set(`line_items[${line}][price_data][unit_amount]`, String(ONE_TIME_DISCOUNTED_UNIT_CENTS))
+        parameters.set(`line_items[${line}][price_data][product_data][name]`, 'OutDock verifier access (50% transaction discount)')
         parameters.set(`line_items[${line}][quantity]`, String(input.discountedUnits))
       }
       appendMetadata(parameters, 'payment_intent_data[metadata]', metadata)

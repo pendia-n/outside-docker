@@ -40,7 +40,7 @@ export function createAccessRoutes(dependencies: {
   stripe(context: any): StripeRestClient
   origin(context: any): string
   environment(context: any): 'dev' | 'prod'
-  priceIds(context: any): { full: string; discounted: string; subscription: string }
+  priceIds(context: any): { full: string; subscription: string }
 }): Hono {
   const routes = new Hono()
   const actor = async (context: any, role?: AccessActor['role'], mutation = false) => {
@@ -151,7 +151,6 @@ export function createAccessRoutes(dependencies: {
         fullPriceUnits: quote.fullPriceUnits ?? 0,
         discountedUnits: quote.discountedUnits ?? 0,
         fullPriceId: prices.full,
-        discountedPriceId: prices.discounted,
         subscriptionPriceId: prices.subscription,
         username: authenticated.username,
         customerEmail: authenticated.email,

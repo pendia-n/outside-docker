@@ -96,7 +96,7 @@ test('Checkout uses dahlia API, integration identifiers, idempotency, and dynami
   assert.equal(body.get('mode'), 'subscription')
 })
 
-test('one-time access Checkout uses server quantities across full and discounted prices', async () => {
+test('one-time access Checkout uses one price ID and whole-transaction discount pricing', async () => {
   let captured: RequestInit | undefined
   const client = new StripeRestClient({
     apiKey: 'rk_test_abcdefghijklmnopqrstuvwxyz123456',
@@ -110,17 +110,16 @@ test('one-time access Checkout uses server quantities across full and discounted
     },
   })
   await client.createAccessCheckout({
-    orderId: 'order-123', accessModel: 'one_time_range', fullPriceUnits: 6, discountedUnits: 2,
-    fullPriceId: 'price_full123', discountedPriceId: 'price_discount123', username: 'verifier_01',
+    orderId: 'order-123', accessModel: 'one_time_range', fullPriceUnits: 0, discountedUnits: 8,
+    fullPriceId: 'price_full123', username: 'verifier_01',
     successUrl: 'http://localhost/success', cancelUrl: 'http://localhost/cancel',
     idempotencyKey: 'access_checkout_order-123', environment: 'dev',
   })
   const body = new URLSearchParams(captured?.body as string)
   assert.equal(body.get('mode'), 'payment')
-  assert.equal(body.get('line_items[0][price]'), 'price_full123')
-  assert.equal(body.get('line_items[0][quantity]'), '6')
-  assert.equal(body.get('line_items[1][price]'), 'price_discount123')
-  assert.equal(body.get('line_items[1][quantity]'), '2')
+  assert.equal(body.get('line_items[0][price_data][currency]'), 'usd')
+  assert.equal(body.get('line_items[0][price_data][unit_amount]'), '1250')
+  assert.equal(body.get('line_items[0][quantity]'), '8')
   assert.equal(body.get('metadata[billing_kind]'), 'outdock_access')
 })
 
