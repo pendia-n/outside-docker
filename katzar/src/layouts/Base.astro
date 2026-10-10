@@ -1,0 +1,26 @@
+---
+const {title='Katzar',page='home'}=Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#141817" />
+  <meta name="description" content="One link. One person. A conversation with an ending." />
+  <link rel="icon" type="image/svg+xml" href="/od.svg" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <title>{title} · Katzar</title>
+  <script src="/app.js" defer></script>
+</head>
+<body data-page={page} class={page==='room'?'veiled':undefined}>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Katzar home"><img class="brand-mark" src="/od.svg" alt="" width="30" height="30" /><span>Katzar</span></a>
+    <nav aria-label="Main navigation"><a href="/chats">Chats</a><button class="quiet" id="theme-toggle" type="button" aria-label="Switch color theme">◐</button></nav>
+  </header>
+  <main><slot /></main>
+  <footer class="site-footer"><span>One person. One ending.</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></footer>
+</body>
+</html>

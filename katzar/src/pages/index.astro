@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="A conversation with an ending" page="home">
+  <section class="hero shell">
+    <p class="eyebrow">PRIVATE, TIME-LIMITED CHAT</p>
+    <h1>One link.<br />One person.<br /><em>One ending.</em></h1>
+    <p class="lede">Have a conversation without giving out your phone number or building a permanent inbox. Invite one person, talk, and let the room end on time.</p>
+    <div class="actions"><a class="button primary" href="/signup">Create an account</a><a class="button secondary" href="/signin">Sign in</a></div>
+    <p class="fine">Share a room link only with the person you want to talk to. The first person to accept becomes its sole recipient.</p>
+  </section>
+  <section class="shell details" aria-label="How Katzar works">
+    <article><span class="step">01</span><h2>Start from your chat list</h2><p>Choose a free text room or a Full room. Each room has a visible deadline.</p></article>
+    <article><span class="step">02</span><h2>Invite one person</h2><p>Send the private link yourself. They create an account, then explicitly claim the invitation.</p></article>
+    <article><span class="step">03</span><h2>Let it end</h2><p>When time is up, access closes and active chat content is removed from the service.</p></article>
+  </section>
+  <section class="shell plans" aria-label="Plans"><div><p class="eyebrow">SIMPLE PRICING</p><h2>Pay for a room, not a subscription.</h2></div>
+    <div class="plan-grid"><article class="plan"><h3>Free</h3><strong>$0</strong><p>Two hours of text. One creator and one invited recipient.</p></article>
+    <article class="plan featured"><h3>Full</h3><strong>$2 <small>once per room</small></strong><p>Choose up to three days. Text, files up to 5 MB, and recorded voice notes. Your recipient joins free.</p><p id="full-availability" class="fine"></p></article></div>
+    <p class="fine">Voice notes disappear after eight hours or room expiry, whichever is first. Recipients may retain downloaded files or copies they make. “Deleted” means removed from active service; provider backups can persist temporarily.</p>
+  </section>
+</Base>

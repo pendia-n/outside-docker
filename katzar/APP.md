@@ -27,7 +27,7 @@ Use `od.svg` for navbar logo and favicon, plus an ICO fallback. Support phone, t
 
 ## Architecture
 
-Astro renders pages on Cloudflare Workers. A custom Worker entrypoint routes WebSocket upgrades to one Durable Object per room and ordinary requests to Astro. D1 stores accounts, sessions, room state, and encrypted text/metadata. Private R2 stores encrypted files and voice. A scheduled Worker cleanup retries deletion and removes expired voice. Stripe Checkout handles the one-time payment; a signed webhook, not the success redirect, marks the room paid.
+Astro renders pages on Cloudflare Workers. A custom Worker entrypoint handles authenticated APIs and ordinary pages; room clients poll for updates every three seconds. A SQLite-backed Durable Object alarm per room schedules expiry and voice deletion, with a one-minute Worker cron as a retry path. D1 stores accounts, sessions, room state, and encrypted text/metadata. Private R2 stores encrypted files and voice. Stripe Checkout handles the one-time payment; a signed webhook, not the success redirect, marks the room paid.
 
 Browser-side AES-GCM encrypts text, file content/names, and voice with a per-room key. The invite URL fragment carries the room key and invite token; fragments are not sent with HTTP requests. The creator and recipient keep the key in device-local storage for revisits. Losing the key/device means losing access to old content. The Worker never stores a room key or plaintext chat data. Do not load third-party analytics/scripts in chat views. Enforce content security policy, output escaping, origin checks, rate limits, session/role checks, and server-side media limits.
 
@@ -67,7 +67,7 @@ Room creation stores a high-entropy token hash. Invitation claim is a conditiona
 
 Create one Stripe one-time Price for USD 2.00. The server starts a Checkout Session with `mode=payment`, that Price ID, quantity one, a unique room ID in `client_reference_id`/metadata, and success/cancel URLs. Persist the Checkout Session ID against a `pending_payment` room. Do not expose the Stripe secret key to the browser.
 
-Create a Dashboard webhook endpoint at `https://<your-domain>/api/stripe/webhook` for `checkout.session.completed` and, if delayed payment methods are enabled, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`. Save the endpoint signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secrets; keep `STRIPE_SECRET_KEY` there too. The Worker verifies `Stripe-Signature` against the **raw request body** and signing secret, rejects stale/invalid signatures, checks `mode=payment`, `payment_status=paid`, amount=200 USD cents, currency=usd, expected room and Checkout Session IDs, and records Stripe event IDs idempotently. Only then set the room to `inviting`. Handle duplicate and out-of-order delivery safely. A success page polls room state and does not grant access by itself.
+Create a Dashboard webhook endpoint at `https://<your-domain>/api/stripe/webhook` for `checkout.session.completed` and, if delayed payment methods are enabled, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`. Save the endpoint signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secrets; use a least-privilege restricted API key as `STRIPE_API_KEY` there too. The Worker verifies `Stripe-Signature` against the **raw request body** and signing secret, rejects stale/invalid signatures, checks `mode=payment`, `payment_status=paid`, amount=200 USD cents, currency=usd, expected room and Checkout Session IDs, and records Stripe event IDs idempotently. Only then set the room to `inviting`. Handle duplicate and out-of-order delivery safely. A success page polls room state and does not grant access by itself.
 
 For local testing, use Stripe CLI to forward events to the local webhook URL, and use its temporary `whsec_...` value only in local ignored secrets. Test a completed payment, failed/cancelled payment, duplicate webhook, invalid signature, and a success redirect without a webhook. Configure the production Dashboard endpoint separately; its signing secret differs from the CLI secret.
 
@@ -75,7 +75,7 @@ For local testing, use Stripe CLI to forward events to the local webhook URL, an
 
 1. Intro page, responsive theme, logo/favicon, PWA shell, auth screens.
 2. D1 schema, username/password auth, 23-hour session, rate/origin guards.
-3. Two-account free room: single-claim link, encrypted text, realtime events, list and Quit rules, forced expiry and deletion.
+3. Two-account free room: single-claim link, encrypted text, room polling, list and Quit rules, forced expiry and deletion.
 4. One-time paid Checkout, verified webhook, chosen duration, encrypted R2 files, recorded voice, cleanup.
 5. Verify open/asleep tabs at expiry, concurrent claims, unauthorized account denial, media size/type limits, duplicate Stripe events, mobile/tablet/desktop, both themes, and actual D1/R2 cleanup before launch.
 

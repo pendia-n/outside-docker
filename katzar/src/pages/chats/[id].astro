@@ -1,0 +1,9 @@
+---
+import Base from '../../layouts/Base.astro';
+export const prerender=false;
+---
+<Base title="Chat room" page="room"><section class="room-shell"><div class="room-top"><a href="/chats" class="back">← Chats</a><span id="room-state">Loading…</span><button id="veil-toggle" class="quiet" type="button">Privacy veil</button></div>
+  <div id="room-intro" class="room-intro"><h1>One-to-one room</h1><p id="room-timer">Checking room…</p><p id="invite-note" class="fine"></p><button id="copy-invite" class="button secondary" hidden>Copy invitation</button></div>
+  <div id="messages" class="messages" aria-live="polite"></div>
+  <form id="composer" class="composer" hidden><label class="sr-only" for="message-input">Message</label><textarea id="message-input" rows="2" maxlength="4000" placeholder="Write a message…"></textarea><div class="composer-actions"><label id="file-label" class="file-button" hidden>Attach file<input id="file-input" type="file" accept=".pdf,.png,.docx,.pages,.jpg,.jpeg,.gif,.xls,.xlsx,.csv" hidden /></label><button id="record" type="button" class="quiet" hidden>Record voice</button><button type="submit" class="button primary">Send</button></div><p id="composer-status" class="form-status" role="status"></p></form>
+  <div class="room-bottom"><button id="quit-room" class="danger" hidden>Quit this room</button><p class="fine">Times shown in UTC+3. Leaving this page does not quit the room.</p></div></section></Base>

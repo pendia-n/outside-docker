@@ -1,0 +1,9 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Your chats" page="chats"><section class="shell app-shell"><div class="page-top"><div><p class="eyebrow">YOUR SPACE</p><h1>Chats</h1><p id="account-label" class="muted"></p></div><button id="logout" class="quiet">Sign out</button></div>
+  <div class="new-room"><h2>Start a chat</h2><p>Create a one-person invitation and share it only with the person you choose.</p>
+    <div class="plan-select"><label><input type="radio" name="tier" value="free" checked /> Free · 2 hours · text</label><label><input type="radio" name="tier" value="full" /> Full · $2 once · text, files, voice</label></div>
+    <label id="duration-wrap" hidden>Full room duration<select id="duration"><option value="3600">1 hour</option><option value="21600">6 hours</option><option value="86400">1 day</option><option value="172800">2 days</option><option value="259200" selected>3 days</option></select></label>
+    <button class="button primary" id="create-room">Create room</button><p class="form-status" id="create-status" role="status"></p></div>
+  <h2 class="list-title">Your rooms</h2><div id="rooms-list" class="rooms-list"><p>Loading rooms…</p></div></section></Base>
