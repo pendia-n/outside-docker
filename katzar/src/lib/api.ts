@@ -80,7 +80,7 @@ async function checkout(env:Bindings,request:Request,roomId:string):Promise<stri
   if(!env.STRIPE_API_KEY||!env.STRIPE_WEBHOOK_SECRET)throw new Error('Paid rooms are not configured');
   const origin=new URL(request.url).origin;
   const params=new URLSearchParams({mode:'payment',success_url:`${origin}/chats?payment=return`,
-    cancel_url:`${origin}/chats?payment=cancel`,client_reference_id:roomId,
+    cancel_url:`${origin}/chats?payment=cancel&room_id=${encodeURIComponent(roomId)}`,client_reference_id:roomId,
     'metadata[room_id]':roomId,
     'line_items[0][price_data][currency]':'usd',
     'line_items[0][price_data][unit_amount]':'200',
@@ -95,6 +95,29 @@ async function checkout(env:Bindings,request:Request,roomId:string):Promise<stri
   await env.DB.prepare('UPDATE rooms SET checkout_session_id=? WHERE id=?').bind(session.id,roomId).run();
   return session.url;
 }
+async function expirePendingCheckout(env:Bindings,room:Room):Promise<boolean>{
+  if(!env.STRIPE_API_KEY||!room.checkout_session_id)return false;
+  const url=`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(room.checkout_session_id)}`;
+  const headers={Authorization:`Bearer ${env.STRIPE_API_KEY}`};
+  try{
+    let response=await fetch(url,{headers});
+    if(!response.ok)return false;
+    let session=await response.json() as {id?:string;status?:string;payment_status?:string};
+    if(session.id!==room.checkout_session_id||session.payment_status==='paid')return false;
+    if(session.status==='expired')return true;
+    if(session.status!=='open')return false;
+    response=await fetch(`${url}/expire`,{method:'POST',headers:{...headers,'Content-Type':'application/x-www-form-urlencoded'},body:''});
+    if(response.ok){
+      session=await response.json() as {id?:string;status?:string;payment_status?:string};
+      return session.id===room.checkout_session_id&&session.status==='expired'&&session.payment_status!=='paid';
+    }
+    // Payment can complete between retrieval and expiration. Confirm the final state.
+    response=await fetch(url,{headers});
+    if(!response.ok)return false;
+    session=await response.json() as {id?:string;status?:string;payment_status?:string};
+    return session.id===room.checkout_session_id&&session.status==='expired'&&session.payment_status!=='paid';
+  }catch{return false;}
+}
 async function webhook(request:Request,env:Bindings):Promise<Response>{
   if(!env.STRIPE_WEBHOOK_SECRET)return error('Webhook unavailable',503);
   const signature=request.headers.get('Stripe-Signature')||'';
@@ -108,8 +131,15 @@ async function webhook(request:Request,env:Bindings):Promise<Response>{
   if(!signatures.some(sig=>sig.length===expected.length && sig===expected))return error('Invalid signature',400);
   const event=JSON.parse(raw) as {id:string;type:string;data:{object:any}};
   if(!event.id||!event.data?.object)return error('Invalid event',400);
-  if(!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type))return json({ok:true});
   const session=event.data.object;
+  if(event.type==='checkout.session.expired'){
+    const roomId=session.client_reference_id;
+    if(session.mode!=='payment'||session.status!=='expired'||session.payment_status==='paid'||!roomId||session.metadata?.room_id!==roomId)return json({ok:true});
+    const room=await env.DB.prepare('SELECT * FROM rooms WHERE id=?').bind(roomId).first<Room>();
+    if(room&&room.tier==='full'&&room.status==='pending_payment'&&room.checkout_session_id===session.id)await clearRoom(env,room);
+    return json({ok:true});
+  }
+  if(!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type))return json({ok:true});
   if(session.mode!=='payment'||session.payment_status!=='paid'||session.amount_total!==200||session.currency!=='usd')return json({ok:true});
   const roomId=session.client_reference_id;
   if(!roomId||session.metadata?.room_id!==roomId)return json({ok:true});
@@ -183,15 +213,23 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
       if(result.meta.changes===1)try{await armRoom(env,invite[1],now+offered.duration_seconds*1000);}catch{}
       return result.meta.changes===1?json({ok:true}):error('Invitation unavailable',409);
     }
-    const roomRoute=/^\/api\/rooms\/([0-9a-f-]{36})(?:\/(messages|media|quit))?(?:\/([0-9a-f-]{36}))?$/.exec(path);
+    const roomRoute=/^\/api\/rooms\/([0-9a-f-]{36})(?:\/(messages|media|quit|cancel-payment))?(?:\/([0-9a-f-]{36}))?$/.exec(path);
     if(!roomRoute)return error('Not found',404);
+    const action=roomRoute[2]||'';
     const room=await roomForUser(env,roomRoute[1],user.id);
-    if(!room)return error('Room unavailable',404);
+    if(!room)return action==='cancel-payment'?json({cancelled:true,pending:false}):error('Room unavailable',404);
+    if(action==='cancel-payment'&&request.method==='POST'){
+      if(!mutationAllowed(request))return error('Invalid origin',403);
+      if(room.creator_id!==user.id||room.tier!=='full')return error('Room unavailable',404);
+      if(room.status!=='pending_payment')return json({cancelled:false,pending:false});
+      if(!await expirePendingCheckout(env,room))return json({cancelled:false,pending:true});
+      await clearRoom(env,room);
+      return json({cancelled:true,pending:false});
+    }
     if(room.status==='ended'||room.status==='active'&&room.expires_at!==null&&room.expires_at<=Date.now()||room.status==='inviting'&&room.invite_expires_at<=Date.now()){
       await clearRoom(env,room);
       return error('Room ended',410);
     }
-    const action=roomRoute[2]||'';
     if(!action&&request.method==='GET')return json({room:roomView(room,user)});
     if(action==='quit'&&request.method==='POST'){
       if(!mutationAllowed(request))return error('Invalid origin',403);

@@ -90,6 +90,18 @@ async function initChats(){
   const fullOption=document.querySelector('[name=tier][value=full]');
   if(!capabilities.fullAvailable){fullOption.disabled=true;fullOption.parentElement.append(node('span','muted',' · unavailable until payment setup'));} 
   $('#logout').addEventListener('click',async()=>{await jsonPost('/auth/logout',{});location.href='/';});
+  const paymentParams=new URLSearchParams(location.search);
+  if(paymentParams.get('payment')==='cancel'){
+    const roomId=paymentParams.get('room_id'),status=$('#create-status');
+    if(roomId&&/^[0-9a-f-]{36}$/i.test(roomId)){
+      try{
+        const result=await jsonPost('/rooms/'+roomId+'/cancel-payment',{});
+        dropKeys(roomId);
+        status.textContent=result.cancelled?'Checkout canceled. No room was created.':result.pending?'Checkout may still be processing. The room stays unavailable until Stripe confirms its final status.':'Checkout is complete or no longer pending.';
+      }catch{status.textContent='Could not confirm the Checkout status. Stripe will clean up the room after confirming cancellation.';}
+    }
+    history.replaceState(null,'',location.pathname);
+  }
   document.querySelectorAll('[name=tier]').forEach(radio=>radio.addEventListener('change',()=>{
     $('#duration-wrap').hidden=document.querySelector('[name=tier]:checked').value!=='full';
   }));
