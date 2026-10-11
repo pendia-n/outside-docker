@@ -4,7 +4,6 @@ export interface Bindings {
   ROOM_TIMER: DurableObjectNamespace;
   KATZAR_JWT_SECRET: string;
   STRIPE_API_KEY?: string;
-  STRIPE_PRICE_ID?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   ASSETS: Fetcher;
 }

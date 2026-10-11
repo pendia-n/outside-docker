@@ -77,11 +77,14 @@ async function handleAuth(request:Request,env:Bindings,part:string):Promise<Resp
 }
 
 async function checkout(env:Bindings,request:Request,roomId:string):Promise<string>{
-  if(!env.STRIPE_API_KEY||!env.STRIPE_PRICE_ID||!env.STRIPE_WEBHOOK_SECRET)throw new Error('Paid rooms are not configured');
+  if(!env.STRIPE_API_KEY||!env.STRIPE_WEBHOOK_SECRET)throw new Error('Paid rooms are not configured');
   const origin=new URL(request.url).origin;
   const params=new URLSearchParams({mode:'payment',success_url:`${origin}/chats?payment=return`,
     cancel_url:`${origin}/chats?payment=cancel`,client_reference_id:roomId,
-    'metadata[room_id]':roomId,'line_items[0][price]':env.STRIPE_PRICE_ID,
+    'metadata[room_id]':roomId,
+    'line_items[0][price_data][currency]':'usd',
+    'line_items[0][price_data][unit_amount]':'200',
+    'line_items[0][price_data][product_data][name]':'Katzar Full room',
     'line_items[0][quantity]':'1'});
   const response=await fetch('https://api.stripe.com/v1/checkout/sessions',{method:'POST',
     headers:{Authorization:`Bearer ${env.STRIPE_API_KEY}`,'Content-Type':'application/x-www-form-urlencoded',
@@ -123,7 +126,7 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
   try{
     const path=new URL(request.url).pathname;
     if(path==='/api/stripe/webhook'&&request.method==='POST')return webhook(request,env);
-    if(path==='/api/capabilities'&&request.method==='GET')return json({fullAvailable:!!(env.STRIPE_API_KEY&&env.STRIPE_PRICE_ID&&env.STRIPE_WEBHOOK_SECRET)});
+    if(path==='/api/capabilities'&&request.method==='GET')return json({fullAvailable:!!(env.STRIPE_API_KEY&&env.STRIPE_WEBHOOK_SECRET)});
     const auth=/^\/api\/auth\/(signup|signin|logout|me)$/.exec(path);
     if(auth)return handleAuth(request,env,auth[1]);
     const user=await requireUser(request,env);

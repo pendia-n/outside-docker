@@ -65,7 +65,7 @@ Room creation stores a high-entropy token hash. Invitation claim is a conditiona
 
 ## Stripe implementation and setup
 
-Create one Stripe one-time Price for USD 2.00. The server starts a Checkout Session with `mode=payment`, that Price ID, quantity one, a unique room ID in `client_reference_id`/metadata, and success/cancel URLs. Persist the Checkout Session ID against a `pending_payment` room. Do not expose the Stripe secret key to the browser.
+The server starts a Checkout Session with `mode=payment`, inline one-time USD $2.00 price data, quantity one, a unique room ID in `client_reference_id`/metadata, and success/cancel URLs. No pre-created product or Price ID is needed. Persist the Checkout Session ID against a `pending_payment` room. Do not expose the Stripe secret key to the browser.
 
 Create a Dashboard webhook endpoint at `https://<your-domain>/api/stripe/webhook` for `checkout.session.completed` and, if delayed payment methods are enabled, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`. Save the endpoint signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secrets; use a least-privilege restricted API key as `STRIPE_API_KEY` there too. The Worker verifies `Stripe-Signature` against the **raw request body** and signing secret, rejects stale/invalid signatures, checks `mode=payment`, `payment_status=paid`, amount=200 USD cents, currency=usd, expected room and Checkout Session IDs, and records Stripe event IDs idempotently. Only then set the room to `inviting`. Handle duplicate and out-of-order delivery safely. A success page polls room state and does not grant access by itself.
 
