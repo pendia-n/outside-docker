@@ -15,7 +15,7 @@ const {title='Katzar',page='home'}=Astro.props;
   <title>{title} · Katzar</title>
   <script src="/app.js" defer></script>
 </head>
-<body data-page={page} class={page==='room'?'veiled':undefined}>
+<body data-page={page}>
   <header class="site-header">
     <a class="brand" href="/" aria-label="Katzar home"><img class="brand-mark" src="/od.svg" alt="" width="30" height="30" /><span>Katzar</span></a>
     <nav aria-label="Main navigation"><a href="/chats">Chats</a><button class="quiet" id="theme-toggle" type="button" aria-label="Switch color theme">◐</button></nav>

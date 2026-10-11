@@ -33,6 +33,36 @@ async function ensureUser(){
   catch{sessionStorage.setItem('katzar-return',location.pathname+location.search+location.hash);location.href='/signin';return null;}
 }
 if(page==='signup'||page==='signin'){
+  let availabilityTimer=null,availabilityRequest=0,usernameAvailability='idle';
+  async function checkUsername(){
+    const input=$('#username-input'),hint=$('#username-status'),value=input.value;
+    if(!/^[A-Za-z][A-Za-z0-9_]{2,23}$/.test(value)){
+      usernameAvailability='invalid';hint.textContent=value?'Use 3–24 characters: start with a letter, then letters, numbers, or _.':'';
+      return {valid:false,available:false};
+    }
+    const requestId=++availabilityRequest;
+    usernameAvailability='checking';hint.textContent='Checking username…';
+    try{
+      const result=await api('/auth/username-availability?username='+encodeURIComponent(value));
+      if(requestId!==availabilityRequest||input.value!==value)return {valid:false,available:false};
+      usernameAvailability=result.available?'available':'taken';
+      hint.textContent=result.available?'Username is available.':'That username is already taken.';
+      return result;
+    }catch{
+      if(requestId===availabilityRequest){usernameAvailability='error';hint.textContent='Could not check right now. We’ll check again when you submit.';}
+      return {valid:true,available:false,error:true};
+    }
+  }
+  if(page==='signup')$('#username-input').addEventListener('input',()=>{
+    clearTimeout(availabilityTimer);availabilityRequest++;
+    const input=$('#username-input'),hint=$('#username-status');
+    if(!input.value){usernameAvailability='idle';hint.textContent='';return;}
+    if(!/^[A-Za-z][A-Za-z0-9_]{2,23}$/.test(input.value)){
+      usernameAvailability='invalid';hint.textContent='Use 3–24 characters: start with a letter, then letters, numbers, or _.';return;
+    }
+    usernameAvailability='checking';hint.textContent='Checking username…';
+    availabilityTimer=setTimeout(checkUsername,350);
+  });
   $('#auth-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const form=event.currentTarget;
@@ -40,6 +70,11 @@ if(page==='signup'||page==='signin'){
     const button=form.querySelector('button');
     button.disabled=true;status.textContent='';
     try{
+      if(page==='signup'&&usernameAvailability!=='available'){
+        clearTimeout(availabilityTimer);
+        const result=await checkUsername();
+        if(!result.available){button.disabled=false;return;}
+      }
       await jsonPost('/auth/'+page,{username:form.elements.namedItem('username').value,password:form.elements.namedItem('password').value});
       const destination=sessionStorage.getItem('katzar-return')||'/chats';
       sessionStorage.removeItem('katzar-return');
@@ -120,11 +155,11 @@ async function initRoom(){
   let room=null,lastIds='',pollBusy=false;
   const setStatus=value=>{status.textContent=value;};
   const veil=()=>document.body.classList.add('veiled');
-  $('#veil-toggle').textContent='Reveal messages';
+  $('#veil-toggle').textContent='Dim messages';
   $('#veil-toggle').addEventListener('click',()=>{
     const veiled=document.body.classList.toggle('veiled');
-    $('#veil-toggle').textContent=veiled?'Reveal messages':'Hide messages';
-    $('#veil-toggle').setAttribute('aria-pressed',String(!veiled));
+    $('#veil-toggle').textContent=veiled?'Show clearly':'Dim messages';
+    $('#veil-toggle').setAttribute('aria-pressed',String(veiled));
   });
   window.addEventListener('blur',veil);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)veil();else refresh();});

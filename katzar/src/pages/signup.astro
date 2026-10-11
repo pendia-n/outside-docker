@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 ---
 <Base title="Create account" page="signup"><section class="auth shell"><p class="eyebrow">START PRIVATE</p><h1>Create your account</h1><p>A username and password are all you need. There is no password recovery.</p>
-  <form id="auth-form"><label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z][A-Za-z0-9_]{2,23}" /></label>
+  <form id="auth-form"><label>Username<input id="username-input" name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z][A-Za-z0-9_]{2,23}" aria-describedby="username-status" /></label><p id="username-status" class="fine" aria-live="polite"></p>
     <label>Password<input type="password" name="password" autocomplete="new-password" required minlength="12" maxlength="128" /></label>
     <p class="fine">Use 12 or more characters with uppercase, lowercase, a number, and a symbol. Keep it safe; we cannot reset it.</p>
     <button class="button primary" type="submit">Create account</button><p class="form-status" role="status"></p></form><p>Already have an account? <a href="/signin">Sign in</a></p></section></Base>

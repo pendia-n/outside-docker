@@ -129,6 +129,13 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
     if(path==='/api/capabilities'&&request.method==='GET')return json({fullAvailable:!!(env.STRIPE_API_KEY&&env.STRIPE_WEBHOOK_SECRET)});
     const auth=/^\/api\/auth\/(signup|signin|logout|me)$/.exec(path);
     if(auth)return handleAuth(request,env,auth[1]);
+    if(path==='/api/auth/username-availability'&&request.method==='GET'){
+      if(!await rate(env,request,'username-availability',120))return error('Try again later',429);
+      const username=new URL(request.url).searchParams.get('username')||'';
+      if(!validUser(username))return json({valid:false,available:false});
+      const row=await env.DB.prepare('SELECT id FROM users WHERE username_key=?').bind(username.toLowerCase()).first<{id:string}>();
+      return json({valid:true,available:!row});
+    }
     const user=await requireUser(request,env);
     if(user instanceof Response)return user;
     if(path==='/api/rooms'&&request.method==='GET'){
