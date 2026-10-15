@@ -1,6 +1,6 @@
 # Katzar
 
-A one-to-one room with a visible ending. The free tier provides two hours of encrypted text after the invited person joins. Full rooms are designed for a one-time $2 Stripe Checkout payment, a chosen duration up to three days, encrypted attachments up to 5 MB, and in-browser voice notes up to 5 MB. The recipient does not pay.
+A one-to-one room with a visible ending. The free tier provides two hours of encrypted text after the invited person joins. Full rooms use a one-time $2 Stripe Checkout payment, a chosen duration up to three days, encrypted attachments up to 5 MB, and in-browser voice notes up to 5 MB. The recipient does not pay. Pay for three Full rooms within one rolling 120-hour period to earn eight free Full room credits, automatically applied to later Full rooms.
 
 Current Cloudflare Worker: https://katzar.pendia-community.workers.dev. Full rooms remain disabled until a Stripe API key and webhook signing secret are configured. The homepage and chat list explain that status rather than initiating an incomplete payment.
 

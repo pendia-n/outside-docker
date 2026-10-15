@@ -1,6 +1,7 @@
 import { armRoom, b64, clearCookie, clearRoom, cookie, currentUser, error, json, mutationAllowed, passwordHash, passwordStrong, roomForUser, sha256, signSession, unb64, type Bindings, type Room } from './core';
 
 const HOUR=3600_000;
+const REWARD_WINDOW=5*24*HOUR;
 const MAX_MEDIA=5_000_000 + 32;
 const allowedExtensions=new Set(['pdf','png','docx','pages','jpg','jpeg','gif','xls','xlsx','csv']);
 type User={id:string;username:string;sid:string};
@@ -145,9 +146,22 @@ async function webhook(request:Request,env:Bindings):Promise<Response>{
   if(!roomId||session.metadata?.room_id!==roomId)return json({ok:true});
   const room=await env.DB.prepare('SELECT * FROM rooms WHERE id=?').bind(roomId).first<Room>();
   if(!room||room.tier!=='full'||room.checkout_session_id&&room.checkout_session_id!==session.id)return json({ok:true});
+  const purchasedAt=Date.now();
   await env.DB.batch([
     env.DB.prepare('INSERT OR IGNORE INTO payment_events(stripe_event_id,received_at) VALUES(?,?)').bind(event.id,Date.now()),
-    env.DB.prepare("UPDATE rooms SET status='inviting',checkout_session_id=? WHERE id=? AND status='pending_payment'").bind(session.id,roomId)
+    env.DB.prepare("UPDATE rooms SET status='inviting',checkout_session_id=? WHERE id=? AND tier='full' AND creator_id=? AND status='pending_payment'").bind(session.id,roomId,room.creator_id),
+    env.DB.prepare(`INSERT OR IGNORE INTO paid_room_purchases(room_id,user_id,purchased_at)
+      SELECT id,creator_id,? FROM rooms WHERE id=? AND tier='full' AND creator_id=? AND checkout_session_id=? AND status='inviting'`)
+      .bind(purchasedAt,roomId,room.creator_id,session.id),
+    env.DB.prepare(`INSERT OR IGNORE INTO paid_room_rewards(trigger_room_id,user_id,granted_at,credits)
+      SELECT ?,?,?,8 WHERE (SELECT COUNT(*) FROM paid_room_purchases
+        WHERE user_id=? AND purchased_at>=? AND purchased_at>COALESCE(
+          (SELECT MAX(granted_at) FROM paid_room_rewards WHERE user_id=?),0))>=3`)
+      .bind(roomId,room.creator_id,purchasedAt,room.creator_id,purchasedAt-REWARD_WINDOW,room.creator_id),
+    env.DB.prepare(`INSERT INTO full_room_credit_balances(user_id,credits,updated_at)
+      SELECT ?,8,? WHERE changes()=1
+      ON CONFLICT(user_id) DO UPDATE SET credits=credits+excluded.credits,updated_at=excluded.updated_at`)
+      .bind(room.creator_id,purchasedAt)
   ]);
   return json({ok:true});
 }
@@ -156,7 +170,11 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
   try{
     const path=new URL(request.url).pathname;
     if(path==='/api/stripe/webhook'&&request.method==='POST')return webhook(request,env);
-    if(path==='/api/capabilities'&&request.method==='GET')return json({fullAvailable:!!(env.STRIPE_API_KEY&&env.STRIPE_WEBHOOK_SECRET)});
+    if(path==='/api/capabilities'&&request.method==='GET'){
+      const account=await currentUser(request,env);
+      const credits=account?await env.DB.prepare('SELECT credits FROM full_room_credit_balances WHERE user_id=?').bind(account.id).first<{credits:number}>():null;
+      return json({fullAvailable:!!(env.STRIPE_API_KEY&&env.STRIPE_WEBHOOK_SECRET)||(credits?.credits||0)>0,fullCredits:credits?.credits||0});
+    }
     const auth=/^\/api\/auth\/(signup|signin|logout|me)$/.exec(path);
     if(auth)return handleAuth(request,env,auth[1]);
     if(path==='/api/auth/username-availability'&&request.method==='GET'){
@@ -170,7 +188,8 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
     if(user instanceof Response)return user;
     if(path==='/api/rooms'&&request.method==='GET'){
       const rows=await env.DB.prepare(`SELECT * FROM rooms WHERE creator_id=? OR recipient_id=? ORDER BY created_at DESC LIMIT 100`).bind(user.id,user.id).all<Room>();
-      return json({rooms:rows.results.map(room=>roomView(room,user))});
+      const balance=await env.DB.prepare('SELECT credits FROM full_room_credit_balances WHERE user_id=?').bind(user.id).first<{credits:number}>();
+      return json({rooms:rows.results.map(room=>roomView(room,user)),fullCredits:balance?.credits||0});
     }
     if(path==='/api/rooms'&&request.method==='POST'){
       if(!mutationAllowed(request))return error('Invalid origin',403);
@@ -180,6 +199,19 @@ export async function api(request:Request,env:Bindings):Promise<Response>{
       const duration=input.tier==='free'?7200:Number(input.durationSeconds);
       if(input.tier==='full'&&(!Number.isInteger(duration)||duration<3600||duration>259200))return error('Invalid duration');
       const roomId=id(),now=Date.now();
+      if(input.tier==='full'){
+        const used=await env.DB.batch([
+          env.DB.prepare('UPDATE full_room_credit_balances SET credits=credits-1,updated_at=? WHERE user_id=? AND credits>0').bind(now,user.id),
+          env.DB.prepare(`INSERT INTO rooms(id,creator_id,invite_token_hash,tier,duration_seconds,status,created_at,invite_expires_at)
+            SELECT ?,?,?, 'full',?, 'inviting',?,? WHERE changes()=1`)
+            .bind(roomId,user.id,await sha256(input.inviteToken),duration,now,now+24*HOUR)
+        ]);
+        if(used[1].meta.changes===1){
+          try{await armRoom(env,roomId,now+24*HOUR);}catch{}
+          const balance=await env.DB.prepare('SELECT credits FROM full_room_credit_balances WHERE user_id=?').bind(user.id).first<{credits:number}>();
+          return json({id:roomId,status:'inviting',promoCreditUsed:true,fullCredits:balance?.credits||0});
+        }
+      }
       const status=input.tier==='full'?'pending_payment':'inviting';
       await env.DB.prepare(`INSERT INTO rooms(id,creator_id,invite_token_hash,tier,duration_seconds,status,created_at,invite_expires_at)
         VALUES(?,?,?,?,?,?,?,?)`).bind(roomId,user.id,await sha256(input.inviteToken),input.tier,duration,status,now,now+24*HOUR).run();

@@ -88,7 +88,7 @@ async function initChats(){
   $('#account-label').textContent='Signed in as '+user.username;
   const capabilities=await api('/capabilities');
   const fullOption=document.querySelector('[name=tier][value=full]');
-  if(!capabilities.fullAvailable){fullOption.disabled=true;fullOption.parentElement.append(node('span','muted',' · unavailable until payment setup'));} 
+  if(!capabilities.fullAvailable){fullOption.disabled=true;fullOption.parentElement.append(node('span','muted',' · unavailable until payment setup'));}
   $('#logout').addEventListener('click',async()=>{await jsonPost('/auth/logout',{});location.href='/';});
   const paymentParams=new URLSearchParams(location.search);
   if(paymentParams.get('payment')==='cancel'){
@@ -123,6 +123,8 @@ async function initChats(){
 async function showRooms(){
   try{
     const data=await api('/rooms');
+    const creditLabel=$('#credit-balance');
+    if(creditLabel)creditLabel.textContent=data.fullCredits>0?`You have ${data.fullCredits} free Full room credit${data.fullCredits===1?'':'s'}. They apply automatically to your next Full room.`:'Pay for 3 Full rooms within 5 days to earn 8 free Full room credits.';
     const container=$('#rooms-list');container.replaceChildren();
     if(!data.rooms.length){container.append(node('p','','No rooms yet. Start one above.'));return;}
     for(const room of data.rooms){
