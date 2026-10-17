@@ -5,6 +5,7 @@
 	"name": "katzar",
 	"main": "./src/worker.ts",
 	"d1_databases": [{ "binding": "DB", "database_name": "katzar", "database_id": "7113a80a-ce1e-467c-98db-1a030b9e1c75" }],
+	"kv_namespaces": [{ "binding": "SESSION", "id": "1845c453579c43a69fa18dbb3d3150a1" }],
 	"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "katzar-media" }],
 	"durable_objects": { "bindings": [{ "name": "ROOM_TIMER", "class_name": "RoomTimer" }] },
 	"migrations": [{ "tag": "room-timer-v1", "new_sqlite_classes": ["RoomTimer"] }],
